@@ -28,9 +28,13 @@ std::vector<double> vs = {250,1000};	// Vs für Schichten [m/s]
 std::vector<double> vp = {1350,2000};	// Vp für Schichten [m/s]
 std::vector<double> dens = {2400,2400}; // Dichten [kg/m3]
 
-std::tuple<dcomp,double,double,dcomp,double,dcomp,dcomp,double> compute_tn(double w, double k, double vp, double vs, double mu){
+std::pair<double,double> compute_kvert(double w, double k, double vp, double vs){
 	double hn = sqrt(2*pow(k,2)-(pow(w,2)/pow(vp,2)));
 	double kn = sqrt(2*pow(k,2)-(pow(w,2)/pow(vs,2)));
+	return std::make_pair(hn, kn);
+}
+
+std::tuple<double,double,dcomp,double,double> compute_tn(double w, double k, double vp, double vs, double mu, double hn, double kn){
 	double ln = pow(k,2)*+pow(kn,2);
 	double t_factor = (-1)*pow(vs,2)/(2*mu*hn*kn*pow(w,2));
 	dcomp tn11 = (2.0*i*mu*k*hn*kn)*t_factor;
@@ -41,7 +45,12 @@ std::tuple<dcomp,double,double,dcomp,double,dcomp,dcomp,double> compute_tn(doubl
 	dcomp tn22 = (2.0*i*mu*k*hn*kn)*t_factor;
 	dcomp tn23 = (i*k*hn)*t_factor;
 	double tn24 = ((-1)*hn*kn)*t_factor;
-	return std::make_tuple(tn11,tn12,tn13,tn14,tn21,tn22,tn23,tn24);
+	double T1212 = tn11*tn22 - tn12*tn21;
+	double T1213 = tn11*tn23 - tn13*tn21;
+	dcomp T1214 = tn11*tn24 - tn14*tn21;
+	double T1224 = tn12*tn24 - tn14*tn22;
+	double T1234 = tn13*tn24 - tn14*tn23;
+	return std::make_tuple(T1212,T1213,T1214,T1224,T1234);
 }
 
 int main()
@@ -68,8 +77,16 @@ int main()
 	
 	for(int freq=0; freq<w.size(); freq++){
 		for(int kint=0; kint<=nk; kint++){
+			
 			double k=k_lim[0]+kint*(k_lim[1]-k_lim[0])/nk;
-			auto tn = compute_tn(w[freq], k, vp[nlay-1], vs[nlay-1], mu);
+			
+			for(int n=nlay-1;n=0;n--){
+				auto kvert = compute_kvert(w[freq], k, vp[n], vs[n]);
+				if (n==nlay-1)
+					auto tn = compute_tn(w[freq], k, vp[n], vs[n], mu, std::get<0>(kvert), std::get<1>(kvert));
+				else
+					compute_gn = 
+			}
 			
 		}
 	}
