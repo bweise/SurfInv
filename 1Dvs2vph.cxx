@@ -22,7 +22,7 @@ std::vector<double> periods = {0.1};
 
 // Kreiswellenzahlen-Limits in rad/m
 std::vector<double> k_lim = {20*M_PI/1000,20*M_PI/200};
-int nk = 5; //Anzahl Wellenzahlen zum durchprobieren
+int nk = 3; //Anzahl Wellenzahlen zum durchprobieren (min. 2)
 
 // Definition 1D Modell
 std::vector<double> depth = {0,25};	// Tiefe Schichtgrenzen [m]
@@ -36,7 +36,11 @@ std::pair<dcomp,dcomp> compute_kvert(double w, double k, double vp, double vs){
 	return std::make_pair(sqrt(hn), sqrt(kn));
 }
 
-std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp> compute_T(double w, double k, double vp, double vs, double mu, dcomp hn, dcomp kn){
+std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp> compute_T(double w, double k, double vp, double vs, double mu){
+	auto kvert = compute_kvert(w, k, vp, vs);
+	dcomp hn = std::get<0>(kvert);
+	dcomp kn = std::get<1>(kvert);
+	cout << "kvert: " << std::get<0>(kvert) << "\t" << std::get<1>(kvert) << "\n";
 	dcomp ln = pow(k,2)+pow(kn,2);
 	dcomp t_factor = (-1.0)*pow(vs,2)/(2*mu*hn*kn*pow(w,2));
 	//cout << ln << "\t" << t_factor << "\n";
@@ -111,12 +115,36 @@ std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dco
 	dcomp G1423 = CH*CK-G1212;
 	dcomp G2412 = c1*(a1*CH*SK-pow(gam,2)*pow(hnn,2)*SH*CK);
 	dcomp G2413 = pow(hnn,2)*SH*SK;
-	dcomp G3412 = pow(c1,2)*(2*pow(gam,2)*a1*CH*CK+(pow(a1,2)+pow(gam,2)*a5)*SH*SK);
-	//cout << "G-Test: " << G1212 << " " << G1213 << " " << iG1214 << " " << G1224 << " " << G1234 << " " << G1312 << " " << iG1314 << " " << G1324 << " " << iG1412 << " " << iG1413 << " " << G1423 << " " << G2412 << " " << G2413 << " " << G3412 << " " << "\n";
+	dcomp G3412 = pow(c1,2)*(2.0*pow(gam,2)*a1*CH*CK+(pow(a1,2)+pow(gam,2)*a5)*SH*SK);
+	cout << "G-Test: " << G1212 << " " << G1213 << " " << iG1214 << " " << G1224 << " " << G1234 << " " << G1312 << " " << iG1314 << " " << G1324 << " " << iG1412 << " " << iG1413 << " " << G1423 << " " << G2412 << " " << G2413 << " " << G3412 << " " << "\n";
 	return std::make_tuple(G1212,G1213,iG1214,G1224,G1234,G1312,iG1314,G1324,iG1412,iG1413,G1423,G2412,G2413,G3412,CH,CK,expcorr);
 }
 
-std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp> compute_R(dcomp G1212, dcomp G1213, dcomp iG1214, dcomp G1224, dcomp G1234, dcomp G1312, dcomp iG1314, dcomp G1324, dcomp iG1412, dcomp iG1413, dcomp G1423, dcomp G2412, dcomp G2413, dcomp G3412, dcomp T1212, dcomp T1213, dcomp T1214, dcomp T1224, dcomp T1234, double w, dcomp CH, dcomp CK, dcomp expcorr){
+std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp> compute_R(double w, double k, double vp, double vs, double dn, double dens, std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp> T){
+	dcomp T1212 = std::get<0>(T);
+	dcomp T1213 = std::get<1>(T);
+	dcomp T1214 = std::get<2>(T);
+	dcomp T1224 = std::get<3>(T);
+	dcomp T1234 = std::get<4>(T);
+	auto kvert = compute_kvert(w, k, vp, vs);
+	auto G = compute_G(std::get<0>(kvert), std::get<1>(kvert),k,dn,w,vp,dens);
+	dcomp G1212 = std::get<0>(G);
+	dcomp G1213 = std::get<1>(G);
+	dcomp iG1214 = std::get<2>(G);
+	dcomp G1224 = std::get<3>(G);
+	dcomp G1234 = std::get<4>(G);
+	dcomp G1312 = std::get<5>(G);
+	dcomp iG1314 = std::get<6>(G);
+	dcomp G1324 = std::get<7>(G);
+	dcomp iG1412 = std::get<8>(G);
+	dcomp iG1413 = std::get<9>(G);
+	dcomp G1423 = std::get<10>(G);
+	dcomp G2412 = std::get<11>(G);
+	dcomp G2413 = std::get<12>(G);
+	dcomp G3412 = std::get<13>(G);
+	dcomp CH = std::get<14>(G);
+	dcomp CK = std::get<15>(G);
+	dcomp expcorr = std::get<16>(G);
 	//cout << "G-Test: " << G1212 << " " << G1213 << " " << iG1214 << " " << G1224 << " " << G1234 << " " << G1312 << " " << iG1314 << " " << G1324 << " " << iG1412 << " " << iG1413 << " " << G1423 << " " << G2412 << " " << G2413 << " " << G3412 << " " << "\n";
 	//cout << "T-Test: " << T1212 << " " << T1213 << " " << T1214 << " " << T1224 << " " << T1234 << "\n";
 	dcomp R1212 = T1212*G1212+(T1213*G1312-2.0*T1214*iG1412+T1224*G2412-T1234*G3412)/pow(w,1);
@@ -151,9 +179,9 @@ int main()
 	cout << "Schermodul unterste Schicht: " << mu << "\n\n\n";
 
 	for(int freq=0; freq<w.size(); freq++){
-		for(int kint=0; kint<=nk; kint++){
+		for(int kint=0; kint<nk; kint++){
 			
-			double k=k_lim[0]+kint*(k_lim[1]-k_lim[0])/nk;
+			double k=k_lim[0]+kint*(k_lim[1]-k_lim[0])/(nk-1);
 			cout << "Aktuelle Kreisfreq. & Wellenzahl: " << w[freq] << "\t" << k << "\n";
 			
 			std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp> R;
@@ -161,10 +189,9 @@ int main()
 			for(int n=nlay-1;n>=0;n--){
 				cout << "Schicht: " << n+1 << "\n";
 				cout << "Geschwindigkeiten: " << vp[n] << "\t" << vs[n] << "\n";
-				auto kvert = compute_kvert(w[freq], k, vp[n], vs[n]);
-				cout << "kvert: " << std::get<0>(kvert) << "\t" << std::get<1>(kvert) << "\n";
+				
 				if (n==nlay-1){
-					R = compute_T(w[freq], k, vp[n], vs[n], mu, std::get<0>(kvert), std::get<1>(kvert));
+					R = compute_T(w[freq], k, vp[n], vs[n], mu);
 					cout << "R-Komponenten: " << std::get<0>(R) << "\t"
 						<< std::get<1>(R) << "\t"
 						<< std::get<2>(R) << "\t"
@@ -174,8 +201,7 @@ int main()
 				else {
 					double dn = depth[n+1]-depth[n];
 					cout << "Schichtdicke: " << dn << "m\n";
-					auto G = compute_G(std::get<0>(kvert), std::get<1>(kvert),k,dn,w[freq],vp[n],dens[n]);
-					R = compute_R(std::get<0>(G), std::get<1>(G), std::get<2>(G), std::get<3>(G), std::get<4>(G), std::get<5>(G), std::get<6>(G), std::get<7>(G), std::get<8>(G), std::get<9>(G), std::get<10>(G), std::get<11>(G), std::get<12>(G), std::get<13>(G), std::get<0>(R), std::get<1>(R), std::get<2>(R), std::get<3>(R), std::get<4>(R), w[freq], std::get<14>(G), std::get<15>(G), std::get<16>(G));
+					R = compute_R(w[freq], k, vp[n], vs[n], dn, dens[n], R);
 					cout << "R-Komponenten: " << std::get<0>(R) << "\t"
 						<< std::get<1>(R) << "\t"
 						<< std::get<2>(R) << "\t"
