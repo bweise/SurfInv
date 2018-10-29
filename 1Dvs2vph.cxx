@@ -20,7 +20,7 @@ const std::complex<double> i(0, 1);
 //std::vector<double> periods = {0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1};
 std::vector<double> periods = {0.1};
 
-int nk = 3; //Anzahl Wellenzahlen zum durchprobieren (min. 2)
+int nk = 2; //Anzahl Wellenzahlen zum durchprobieren (min. 2)
 
 // Definition 1D Modell
 std::vector<double> depth = {0,25};	// Tiefe Schichtgrenzen [m]
@@ -39,7 +39,7 @@ double compute_dfvr(double vp, double vs, double vr){
 }
 
 double newton_vr(double vp, double vs){
-	double vrlast = vs-10;
+	double vrlast = vs-(vs*0.1);
 	double vr;
 	double diff=99999.0;
 	while(diff>0.0001){
@@ -77,7 +77,7 @@ std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp> compute_T(double w, double k, double v
 	dcomp t22 = (2.0*i*mu*k*hv*kv)*t_factor;
 	dcomp t23 = (i*k*hv)*t_factor;
 	dcomp t24 = ((-1.0)*hv*kv)*t_factor;
-	cout << "T-Komponenten: " << t11 << "\t" << t12 << "\t" << t13 << "\t" << t14 << "\n"
+	cout << "T-Komponenten:\n" << t11 << "\t" << t12 << "\t" << t13 << "\t" << t14 << "\n"
 		<< t21 << "\t" << t22 << "\t" << t23 << "\t" << t24 << "\n";
 	dcomp T1212 = t11*t22 - t12*t21;
 	dcomp T1213 = t11*t23 - t13*t21;
@@ -96,6 +96,7 @@ std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dco
 	
 	dcomp hvnorm = hv/k;
 	dcomp kvnorm = kv/k;
+	cout << "kvert (normiert): " << hvnorm << "\t" << kvnorm << "\n";
 	
 	dcomp SH = 0;
 	dcomp CH = 0;
@@ -119,8 +120,8 @@ std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dco
 		SK = sin((-1.0)*i*dn*kv)/kvnorm;
 		CK = cos((-1.0)*i*dn*kv);
 	}
-	
-	//cout << SH << "\t" << CH << "\t" << SK << "\t"<< CK << "\n";
+	cout << "SH: " << SH << "\t CH: " << CH << "\n"
+		<< "SK: " << SK << "\t CK: " << CK << "\n";
 	
 	double gam = 2.0*pow(k,2)/pow((w/vp),2);
 	double a1 = pow(gam,2)-2.0*gam+1.0;
@@ -131,6 +132,11 @@ std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dco
 	dcomp expcorr = exp((-1.0)*hv*dn-kv*dn);
 	double c1 = dens*pow(w,2)/k;
 	double c2 = 1.0/c1;
+	
+	cout << "gamma: " << gam << "\n"
+		<< "a1: " << a1 << "\t a2: " << a2 << "\t a3: " << a3 << "\t a4: " << a4 << "\t a5: " << a5 << "\n"
+		<< "expcorr: " << expcorr << "\n"
+		<< "c1: " << c1 << "\t c2: " << c2 << "\n";
 	
 	dcomp G1212 = a3*CH*CK-(a1+a5)*SH*SK-(a3-1)*expcorr;
 	dcomp G1213 = c2*(CH*SK-pow(hvnorm,2)*SH*CK);
@@ -146,7 +152,11 @@ std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dco
 	dcomp G2412 = c1*(a1*CH*SK-pow(gam,2)*pow(hvnorm,2)*SH*CK);
 	dcomp G2413 = pow(hvnorm,2)*SH*SK;
 	dcomp G3412 = pow(c1,2)*(2.0*pow(gam,2)*a1*CH*CK+(pow(a1,2)+pow(gam,2)*a5)*SH*SK);
-	cout << "G-Komponenten: " << G1212 << " " << G1213 << " " << iG1214 << " " << G1224 << " " << G1234 << " " << G1312 << " " << iG1314 << " " << G1324 << " " << iG1412 << " " << iG1413 << " " << G1423 << " " << G2412 << " " << G2413 << " " << G3412 << " " << "\n";
+	cout << "G-Komponenten:\n" << G1212 << "\t" << G1213 << "\t" << iG1214 << "\t" << G1224 << "\t" << G1234 << "\n"
+		<< G1312 << "\t" << iG1314 << "\t" << G1324 << "\n"
+		<< iG1412 << "\t" << iG1413 << "\t" << G1423 << "\n"
+		<< G2412 << "\t" << G2413 << "\n"
+		<< G3412 << "\t" << "\n";
 	return std::make_tuple(G1212,G1213,iG1214,G1224,G1234,G1312,iG1314,G1324,iG1412,iG1413,G1423,G2412,G2413,G3412,CH,CK,expcorr);
 }
 
@@ -174,8 +184,6 @@ std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp> compute_R(double w, double k, double v
 	dcomp CH = std::get<14>(G);
 	dcomp CK = std::get<15>(G);
 	dcomp expcorr = std::get<16>(G);
-	//cout << "G-Test: " << G1212 << " " << G1213 << " " << iG1214 << " " << G1224 << " " << G1234 << " " << G1312 << " " << iG1314 << " " << G1324 << " " << iG1412 << " " << iG1413 << " " << G1423 << " " << G2412 << " " << G2413 << " " << G3412 << " " << "\n";
-	//cout << "T-Test: " << T1212 << " " << T1213 << " " << T1214 << " " << T1224 << " " << T1234 << "\n";
 	dcomp R1212 = T1212*G1212+(T1213*G1312-2.0*T1214*iG1412+T1224*G2412-T1234*G3412)/pow(w,1);
 	dcomp R1213 = pow(w,2)*T1212*G1213+T1213*CH*CK-2.0*T1214*iG1413-T1224*G2413+T1234*G2412;
 	dcomp R1214 = pow(w,2)*T1212*iG1214+T1213*iG1314+T1214*(2.0*G1423+expcorr)-T1224*iG1413+T1234*iG1412;
