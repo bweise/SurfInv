@@ -1,9 +1,8 @@
-/*
- * 1Dvs2vph
+/* 1Dvs2vph
  * Berechnet aus einem 1D Vs,Vp,Dichte-Modell die Phasengeschwindigkeit
  * zu gegebenen Perioden.
  * Quellen: Haskell (1953), Dunkin (1965), Wathelet (2005),
- * Cercato (2007), Fang (2015)
+ * Cercato (2007)
  */
 
 using namespace std;
@@ -13,6 +12,7 @@ using namespace std;
 #include <complex>
 #include <cmath>
 #include <tuple>
+#include <algorithm>
 typedef complex<double> dcomp;
 const std::complex<double> i(0, 1);
 
@@ -20,8 +20,6 @@ const std::complex<double> i(0, 1);
 //std::vector<double> periods = {0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1};
 std::vector<double> periods = {0.1};
 
-// Kreiswellenzahlen-Limits in rad/m
-std::vector<double> k_lim = {20*M_PI/1000,20*M_PI/200};
 int nk = 3; //Anzahl Wellenzahlen zum durchprobieren (min. 2)
 
 // Definition 1D Modell
@@ -30,30 +28,57 @@ std::vector<double> vs = {250,1000};	// Vs für Schichten [m/s]
 std::vector<double> vp = {1350,2000};	// Vp für Schichten [m/s]
 std::vector<double> dens = {2400,2400}; // Dichten [kg/m3]
 
+double compute_fvr(double vp, double vs, double vr){
+	double fvr = 4-4*(pow(vr,2)/pow(vs,2))+pow(vr,4)/pow(vs,4)-4*sqrt(1-pow(vr,2)/pow(vp,2))*sqrt(1-pow(vr,2)/pow(vs,2));
+	return fvr;
+}
+
+double compute_dfvr(double vp, double vs, double vr){
+	double dfvr = -8*vr/pow(vs,2)+4*pow(vr,3)/pow(vs,4)+(4*vr*(pow(vp,2)+pow(vs,2)-2*pow(vr,2)))/(vp*vs*sqrt((vp-vr)*(vp+vr))*sqrt((vs-vr)*(vs+vr)));
+	return dfvr;
+}
+
+double newton_vr(double vp, double vs){
+	double vrlast = vs-10;
+	double vr;
+	double diff=99999.0;
+	while(diff>0.0001){
+		cout << "vr: " << vrlast << "\t diff: " << diff << "\n";
+		double fvr = compute_fvr(vp, vs, vrlast);
+		double dfvr = compute_dfvr(vp, vs, vrlast);
+		cout << "fvr: " << fvr << "\t dfvr: " << dfvr << "\n";
+		vr = vrlast - fvr/dfvr;
+		diff = sqrt(pow(vr-vrlast,2));
+		vrlast = vr;
+	}
+	cout << "final vr: " << vr << "\t final diff: " << diff << "\n\n\n";
+	return vr;
+}
+
 std::pair<dcomp,dcomp> compute_kvert(double w, double k, double vp, double vs){
-	dcomp hn = 2*pow(k,2)-(pow(w,2)/pow(vp,2));
-	dcomp kn = 2*pow(k,2)-(pow(w,2)/pow(vs,2));
-	return std::make_pair(sqrt(hn), sqrt(kn));
+	dcomp hv = 2*pow(k,2)-(pow(w,2)/pow(vp,2));
+	dcomp kv = 2*pow(k,2)-(pow(w,2)/pow(vs,2));
+	return std::make_pair(sqrt(hv), sqrt(kv));
 }
 
 std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp> compute_T(double w, double k, double vp, double vs, double mu){
 	auto kvert = compute_kvert(w, k, vp, vs);
-	dcomp hn = std::get<0>(kvert);
-	dcomp kn = std::get<1>(kvert);
+	dcomp hv = std::get<0>(kvert);
+	dcomp kv = std::get<1>(kvert);
 	cout << "kvert: " << std::get<0>(kvert) << "\t" << std::get<1>(kvert) << "\n";
-	dcomp ln = pow(k,2)+pow(kn,2);
-	dcomp t_factor = (-1.0)*pow(vs,2)/(2*mu*hn*kn*pow(w,2));
+	dcomp ln = pow(k,2)+pow(kv,2);
+	dcomp t_factor = (-1.0)*pow(vs,2)/(2*mu*hv*kv*pow(w,2));
 	//cout << ln << "\t" << t_factor << "\n";
-	dcomp t11 = (2.0*i*mu*k*hn*kn)*t_factor;
-	dcomp t12 = (mu*ln*kn)*t_factor;
-	dcomp t13 = (hn*kn)*t_factor;
-	dcomp t14 = (i*k*kn)*t_factor;
-	dcomp t21 = ((-1.0)*mu*ln*kn)*t_factor;
-	dcomp t22 = (2.0*i*mu*k*hn*kn)*t_factor;
-	dcomp t23 = (i*k*hn)*t_factor;
-	dcomp t24 = ((-1.0)*hn*kn)*t_factor;
-	/*cout << t11 << "\t" << t12 << "\t" << t13 << "\t" << t14 << "\n"
-		<< t21 << "\t" << t22 << "\t" << t23 << "\t" << t24 << "\n";*/
+	dcomp t11 = (2.0*i*mu*k*hv*kv)*t_factor;
+	dcomp t12 = (mu*ln*kv)*t_factor;
+	dcomp t13 = (hv*kv)*t_factor;
+	dcomp t14 = (i*k*kv)*t_factor;
+	dcomp t21 = ((-1.0)*mu*ln*kv)*t_factor;
+	dcomp t22 = (2.0*i*mu*k*hv*kv)*t_factor;
+	dcomp t23 = (i*k*hv)*t_factor;
+	dcomp t24 = ((-1.0)*hv*kv)*t_factor;
+	cout << "T-Komponenten: " << t11 << "\t" << t12 << "\t" << t13 << "\t" << t14 << "\n"
+		<< t21 << "\t" << t22 << "\t" << t23 << "\t" << t24 << "\n";
 	dcomp T1212 = t11*t22 - t12*t21;
 	dcomp T1213 = t11*t23 - t13*t21;
 	dcomp T1214 = t11*t24 - t14*t21;
@@ -62,10 +87,15 @@ std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp> compute_T(double w, double k, double v
 	return std::make_tuple(T1212,T1213,T1214,T1224,T1234);
 }
 
-std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp> compute_G(dcomp hn, dcomp kn, double k, double dn, double w, double vp, double dens){
+std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp> compute_G(double k, double dn, double w, double vp, double vs, double dens){
 	
-	dcomp hnn = hn/k;
-	dcomp knn = kn/k;
+	auto kvert = compute_kvert(w, k, vp, vs);
+	dcomp hv = std::get<0>(kvert);
+	dcomp kv = std::get<1>(kvert);
+	cout << "kvert: " << hv << "\t" << kv << "\n";
+	
+	dcomp hvnorm = hv/k;
+	dcomp kvnorm = kv/k;
 	
 	dcomp SH = 0;
 	dcomp CH = 0;
@@ -73,50 +103,50 @@ std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dco
 	dcomp CK = 0;
 	
 	
-	if (imag(hnn)==0){
-		SH = 0.5*(1.0-exp((-2.0)*dn*hn))/hnn;
-		CH = 0.5*(1.0+exp((-2.0)*dn*hn));
+	if (imag(hvnorm)==0){
+		SH = 0.5*(1.0-exp((-2.0)*dn*hv))/hvnorm;
+		CH = 0.5*(1.0+exp((-2.0)*dn*hv));
 	}
 	else{
-		SH = sin((-1.0)*i*dn*hn)/hnn;
-		CH = cos((-1.0)*i*dn*hn);
+		SH = sin((-1.0)*i*dn*hv)/hvnorm;
+		CH = cos((-1.0)*i*dn*hv);
 	}
-	if (imag(knn)==0){
-		SK = 0.5*(1.0-exp((-2.0)*dn*kn))/knn;
-		CK = 0.5*(1.0+exp((-2.0)*dn*kn));
+	if (imag(kvnorm)==0){
+		SK = 0.5*(1.0-exp((-2.0)*dn*kv))/kvnorm;
+		CK = 0.5*(1.0+exp((-2.0)*dn*kv));
 	}
 	else{
-		SK = sin((-1.0)*i*dn*kn)/knn;
-		CK = cos((-1.0)*i*dn*kn);
+		SK = sin((-1.0)*i*dn*kv)/kvnorm;
+		CK = cos((-1.0)*i*dn*kv);
 	}
 	
 	//cout << SH << "\t" << CH << "\t" << SK << "\t"<< CK << "\n";
 	
 	double gam = 2.0*pow(k,2)/pow((w/vp),2);
 	double a1 = pow(gam,2)-2.0*gam+1.0;
-	dcomp a2 = pow(hnn,2)*pow(knn,2);
+	dcomp a2 = pow(hvnorm,2)*pow(kvnorm,2);
 	double a3 = pow(gam,2)+a1;
 	double a4 = 1.0-gam;
 	dcomp a5 = pow(gam,2)*a2;
-	dcomp expcorr = exp((-1.0)*hn*dn-kn*dn);
+	dcomp expcorr = exp((-1.0)*hv*dn-kv*dn);
 	double c1 = dens*pow(w,2)/k;
 	double c2 = 1.0/c1;
 	
 	dcomp G1212 = a3*CH*CK-(a1+a5)*SH*SK-(a3-1)*expcorr;
-	dcomp G1213 = c2*(CH*SK-pow(hnn,2)*SH*CK);
+	dcomp G1213 = c2*(CH*SK-pow(hvnorm,2)*SH*CK);
 	dcomp iG1214 = i*c2*((a1-pow(gam,2))*(expcorr-CH*CK)+(a4-gam*a2)*SH*SK);
-	dcomp G1224 = c2*(pow(knn,2)*CH*SK-SH*CK);
+	dcomp G1224 = c2*(pow(kvnorm,2)*CH*SK-SH*CK);
 	dcomp G1234 = pow(c2,2)*(2.0*CH*CK+(1.0+a2)*SH*SK);
-	dcomp G1312 = c1*(pow(gam,2)*pow(knn,2)*CH*SK-a1*SH*CK);
-	dcomp iG1314 = i*(a4*SH*CK+gam*pow(knn,2)*CH*SK);
-	dcomp G1324 = pow(knn,2)*SH*SK;
+	dcomp G1312 = c1*(pow(gam,2)*pow(kvnorm,2)*CH*SK-a1*SH*CK);
+	dcomp iG1314 = i*(a4*SH*CK+gam*pow(kvnorm,2)*CH*SK);
+	dcomp G1324 = pow(kvnorm,2)*SH*SK;
 	dcomp iG1412 = i*c1*((a1-a4)*(a4-gam)*(expcorr-CH*CK)+(a4*a1-gam*a5)*SH*SK);
-	dcomp iG1413 = i*(gam*pow(hnn,2)*SH*CH+a4*CH*SK);
+	dcomp iG1413 = i*(gam*pow(hvnorm,2)*SH*CH+a4*CH*SK);
 	dcomp G1423 = CH*CK-G1212;
-	dcomp G2412 = c1*(a1*CH*SK-pow(gam,2)*pow(hnn,2)*SH*CK);
-	dcomp G2413 = pow(hnn,2)*SH*SK;
+	dcomp G2412 = c1*(a1*CH*SK-pow(gam,2)*pow(hvnorm,2)*SH*CK);
+	dcomp G2413 = pow(hvnorm,2)*SH*SK;
 	dcomp G3412 = pow(c1,2)*(2.0*pow(gam,2)*a1*CH*CK+(pow(a1,2)+pow(gam,2)*a5)*SH*SK);
-	cout << "G-Test: " << G1212 << " " << G1213 << " " << iG1214 << " " << G1224 << " " << G1234 << " " << G1312 << " " << iG1314 << " " << G1324 << " " << iG1412 << " " << iG1413 << " " << G1423 << " " << G2412 << " " << G2413 << " " << G3412 << " " << "\n";
+	cout << "G-Komponenten: " << G1212 << " " << G1213 << " " << iG1214 << " " << G1224 << " " << G1234 << " " << G1312 << " " << iG1314 << " " << G1324 << " " << iG1412 << " " << iG1413 << " " << G1423 << " " << G2412 << " " << G2413 << " " << G3412 << " " << "\n";
 	return std::make_tuple(G1212,G1213,iG1214,G1224,G1234,G1312,iG1314,G1324,iG1412,iG1413,G1423,G2412,G2413,G3412,CH,CK,expcorr);
 }
 
@@ -126,8 +156,7 @@ std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp> compute_R(double w, double k, double v
 	dcomp T1214 = std::get<2>(T);
 	dcomp T1224 = std::get<3>(T);
 	dcomp T1234 = std::get<4>(T);
-	auto kvert = compute_kvert(w, k, vp, vs);
-	auto G = compute_G(std::get<0>(kvert), std::get<1>(kvert),k,dn,w,vp,dens);
+	auto G = compute_G(k,dn,w,vp,vs,dens);
 	dcomp G1212 = std::get<0>(G);
 	dcomp G1213 = std::get<1>(G);
 	dcomp iG1214 = std::get<2>(G);
@@ -156,8 +185,13 @@ std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp> compute_R(double w, double k, double v
 }
 
 int main()
-{
+{	
 	int nlay = depth.size();
+	
+	std::vector<double> vs_sort = vs;
+	std::sort(vs_sort.begin(), vs_sort.end());
+	std::vector<double> c_lim = {0,vs_sort[nlay-1]};
+	c_lim[0] = newton_vr(vp[0], vs[0]);
 	
 	cout << "Anzahl Schichten: " << nlay << "\n";
 	for(int n=0; n<nlay-1; n++)
@@ -179,9 +213,10 @@ int main()
 	cout << "Schermodul unterste Schicht: " << mu << "\n\n\n";
 
 	for(int freq=0; freq<w.size(); freq++){
+		std::vector<double> k_lim = {w[freq]/c_lim[0],w[freq]/c_lim[1]};
 		for(int kint=0; kint<nk; kint++){
 			
-			double k=k_lim[0]+kint*(k_lim[1]-k_lim[0])/(nk-1);
+			double k=k_lim[0]-kint*(k_lim[0]-k_lim[1])/(nk-1);
 			cout << "Aktuelle Kreisfreq. & Wellenzahl: " << w[freq] << "\t" << k << "\n";
 			
 			std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp> R;
