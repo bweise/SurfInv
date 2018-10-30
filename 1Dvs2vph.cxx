@@ -23,10 +23,10 @@ std::vector<double> periods = {0.1};
 int nk = 2; //Anzahl Wellenzahlen zum durchprobieren (min. 2)
 
 // Definition 1D Modell
-std::vector<double> depth = {0,25};	// Tiefe Schichtgrenzen [m]
-std::vector<double> vs = {250,1000};	// Vs für Schichten [m/s]
-std::vector<double> vp = {1350,2000};	// Vp für Schichten [m/s]
-std::vector<double> dens = {2400,2400}; // Dichten [kg/m3]
+std::vector<double> depth = {0,12500,25000,37500,50000};	// Tiefe Schichtgrenzen [m]
+std::vector<double> vp = {5190,6060,6930,7790,8660};	// Vp für Schichten [m/s]
+std::vector<double> vs = {3000,3500,4000,4500,5000};	// Vs für Schichten [m/s]
+std::vector<double> dens = {2400,2625,2850,3075,3300}; // Dichten [kg/m3]
 
 double compute_fvr(double vp, double vs, double vr){
 	double fvr = 4-4*(pow(vr,2)/pow(vs,2))+pow(vr,4)/pow(vs,4)-4*sqrt(1-pow(vr,2)/pow(vp,2))*sqrt(1-pow(vr,2)/pow(vs,2));
@@ -118,6 +118,7 @@ std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dco
 	}
 	else{
 		SK = sin((-1.0)*i*dn*kv)/kvnorm;
+		cout << kv << " " << kvnorm << " " << dn << " " << i << " " << sin(i*dn*kv)/kvnorm << "\n";
 		CK = cos((-1.0)*i*dn*kv);
 	}
 	cout << "SH: " << SH << "\t CH: " << CH << "\n"
@@ -140,6 +141,7 @@ std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dco
 	
 	dcomp G1212 = a3*CH*CK-(a1+a5)*SH*SK-(a3-1)*expcorr;
 	dcomp G1213 = c2*(CH*SK-pow(hvnorm,2)*SH*CK);
+	cout << CH*SK << "\t" << SH*CK << "\n";
 	dcomp iG1214 = i*c2*((a1-pow(gam,2))*(expcorr-CH*CK)+(a4-gam*a2)*SH*SK);
 	dcomp G1224 = c2*(pow(kvnorm,2)*CH*SK-SH*CK);
 	dcomp G1234 = pow(c2,2)*(2.0*CH*CK+(1.0+a2)*SH*SK);
