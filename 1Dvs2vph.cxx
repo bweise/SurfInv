@@ -8,7 +8,7 @@
 using namespace std;
 #include <iostream>
 #include <vector>
-#include <math.h>
+//#include <math.h>
 #include <complex>
 #include <cmath>
 #include <tuple>
@@ -29,12 +29,12 @@ std::vector<double> vs = {3000,3500,4000,4500,5000};	// Vs für Schichten [m/s]
 std::vector<double> dens = {2400,2625,2850,3075,3300}; // Dichten [kg/m3]
 
 double compute_fvr(double vp, double vs, double vr){
-	double fvr = 4-4*(pow(vr,2)/pow(vs,2))+pow(vr,4)/pow(vs,4)-4*sqrt(1-pow(vr,2)/pow(vp,2))*sqrt(1-pow(vr,2)/pow(vs,2));
+	double fvr = 4.0-4.0*(pow(vr,2)/pow(vs,2))+pow(vr,4)/pow(vs,4)-4.0*sqrt(1-pow(vr,2)/pow(vp,2))*sqrt(1.0-pow(vr,2)/pow(vs,2));
 	return fvr;
 }
 
 double compute_dfvr(double vp, double vs, double vr){
-	double dfvr = -8*vr/pow(vs,2)+4*pow(vr,3)/pow(vs,4)+(4*vr*(pow(vp,2)+pow(vs,2)-2*pow(vr,2)))/(vp*vs*sqrt((vp-vr)*(vp+vr))*sqrt((vs-vr)*(vs+vr)));
+	double dfvr = -8.0*vr/pow(vs,2)+4.0*pow(vr,3)/pow(vs,4)+(4.0*vr*(pow(vp,2)+pow(vs,2)-2.0*pow(vr,2)))/(vp*vs*sqrt((vp-vr)*(vp+vr))*sqrt((vs-vr)*(vs+vr)));
 	return dfvr;
 }
 
@@ -55,89 +55,91 @@ double newton_vr(double vp, double vs){
 	return vr;
 }
 
-std::pair<dcomp,dcomp> compute_kvert(double w, double k, double vp, double vs){
-	dcomp hv = 2*pow(k,2)-(pow(w,2)/pow(vp,2));
-	dcomp kv = 2*pow(k,2)-(pow(w,2)/pow(vs,2));
-	return std::make_pair(sqrt(hv), sqrt(kv));
+std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,double,dcomp,dcomp,double> compute_util(double w, double k, double vp, double vs, bool botlay){
+	dcomp mh, mk, hv, kv, SH, CH, SK, CK;
+	if (w/k < vp | botlay == 1){
+		mh = sqrt(pow(k,2)-pow(w/vp,2));
+		hv = mh;
+		SH = (k/mh)*sinh(mh*dn);
+		CH = cosh(mh*dn);
+	}
+	else{
+		mh = sqrt(pow(w/vp,2)-pow(k,2));
+		hv = mh*i;
+		SH = (k/mh)*sin(mh*dn);
+		CH = cos(mh*dn);
+	}
+	if (w/k < vs | botlay == 1){
+		mk = sqrt(pow(k,2)-pow(w/vs,2));
+		kv = mk;
+		SK = (k/mk)*sinh(mk*dn);
+		CK = cosh(mk*dn);
+	}
+	else{
+		mk = sqrt(pow(w/vs,2)-pow(k,2));
+		kv = mk*i;
+		SK = (k/mk)*sin(mk*dn);
+		CK = cos(mk*dn);
+	}
+	double gam = 2.0*pow(vs,2)*pow(k/w,2);
+	dcomp hvnorm = hv/k;
+	dcomp kvnorm = kv/k;
+	double l = 2.0*pow(k,2)-pow(w/vs,2);
+	return std::make_tuple(mh, mk, hv, kv, SH, CH, SK, CK, gam, hvnorm, kvnorm, l);
 }
 
-std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp> compute_T(double w, double k, double vp, double vs, double mu){
-	auto kvert = compute_kvert(w, k, vp, vs);
-	dcomp hv = std::get<0>(kvert);
-	dcomp kv = std::get<1>(kvert);
+std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp> compute_T(double w, double k, double vp, double vs, double mu, double dens){
+	auto util = compute_util(w, k, vp, vs, 1);
+	dcomp hv = std::get<2>(util);
+	dcomp kv = std::get<3>(util);
+	dcomp l = std::get<11>(util);
 	cout << "kvert: " << std::get<0>(kvert) << "\t" << std::get<1>(kvert) << "\n";
-	dcomp ln = pow(k,2)+pow(kv,2);
-	dcomp t_factor = (-1.0)*pow(vs,2)/(2*mu*hv*kv*pow(w,2));
-	//cout << ln << "\t" << t_factor << "\n";
-	dcomp t11 = (2.0*i*mu*k*hv*kv)*t_factor;
-	dcomp t12 = (mu*ln*kv)*t_factor;
-	dcomp t13 = (hv*kv)*t_factor;
-	dcomp t14 = (i*k*kv)*t_factor;
-	dcomp t21 = ((-1.0)*mu*ln*kv)*t_factor;
-	dcomp t22 = (2.0*i*mu*k*hv*kv)*t_factor;
-	dcomp t23 = (i*k*hv)*t_factor;
-	dcomp t24 = ((-1.0)*hv*kv)*t_factor;
-	cout << "T-Komponenten:\n" << t11 << "\t" << t12 << "\t" << t13 << "\t" << t14 << "\n"
-		<< t21 << "\t" << t22 << "\t" << t23 << "\t" << t24 << "\n";
-	dcomp T1212 = t11*t22 - t12*t21;
-	dcomp T1213 = t11*t23 - t13*t21;
-	dcomp T1214 = t11*t24 - t14*t21;
-	dcomp T1224 = t12*t24 - t14*t22;
-	dcomp T1234 = t13*t24 - t14*t23;
+	dcomp T1212 = (pow(vs,4)/(4*pow(w,4)))*((pow(l,2)/(kv*hv))-4*pow(k,2));
+	dcomp T1213 = (-1.0)/(4*dens*pow(w,2)*kv);
+	dcomp T1214 = (i*pow(vs,2)*k/(4*dens*pow(w,4)))*((l/(kv*hv))-2);
+	dcomp T1224 = (1/(4*pow(dens,2)*pow(w,4)))*((pow(k,2)/(kv*hv))-1);
+	dcomp T1234 = (pow(vs,4)/(4*pow(mu,2)*pow(w,4)))*((pow(k,2)/(kv*hv))-1);
 	return std::make_tuple(T1212,T1213,T1214,T1224,T1234);
 }
 
 std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp> compute_G(double k, double dn, double w, double vp, double vs, double dens){
 	
-	auto kvert = compute_kvert(w, k, vp, vs);
-	dcomp hv = std::get<0>(kvert);
-	dcomp kv = std::get<1>(kvert);
+	auto kvert = compute_util(w, k, vp, vs, 0);
+	dcomp mh = std::get<0>(kvert);
+	dcomp mk = std::get<1>(kvert);
+	dcomp hv = std::get<2>(kvert);
+	dcomp kv = std::get<3>(kvert);
+	dcomp SH = std::get<4>(kvert);
+	dcomp CH = std::get<5>(kvert);
+	dcomp SK = std::get<6>(kvert);
+	dcomp CK = std::get<7>(kvert);
+	dcomp gam = std::get<8>(kvert);
+	dcomp hvnorm = std::get<9>(kvert);
+	dcomp kvnorm = std::get<10>(kvert);
+	dcomp l = std::get<11>(kvert);
 	cout << "kvert: " << hv << "\t" << kv << "\n";
 	
-	dcomp hvnorm = hv/k;
-	dcomp kvnorm = kv/k;
+	
 	cout << "kvert (normiert): " << hvnorm << "\t" << kvnorm << "\n";
 	
-	dcomp SH = 0;
-	dcomp CH = 0;
-	dcomp SK = 0;
-	dcomp CK = 0;
-	
-	
-	if (imag(hvnorm)==0){
-		SH = 0.5*(1.0-exp((-2.0)*dn*hv))/hvnorm;
-		CH = 0.5*(1.0+exp((-2.0)*dn*hv));
-	}
-	else{
-		SH = sin((-1.0)*i*dn*hv)/hvnorm;
-		CH = cos((-1.0)*i*dn*hv);
-	}
-	if (imag(kvnorm)==0){
-		SK = 0.5*(1.0-exp((-2.0)*dn*kv))/kvnorm;
-		CK = 0.5*(1.0+exp((-2.0)*dn*kv));
-	}
-	else{
-		SK = sin((-1.0)*i*dn*kv)/kvnorm;
-		cout << kv << " " << kvnorm << " " << dn << " " << i << " " << sin(i*dn*kv)/kvnorm << "\n";
-		CK = cos((-1.0)*i*dn*kv);
-	}
+
 	cout << "SH: " << SH << "\t CH: " << CH << "\n"
 		<< "SK: " << SK << "\t CK: " << CK << "\n";
 	
-	double gam = 2.0*pow(k,2)/pow((w/vp),2);
-	double a1 = pow(gam,2)-2.0*gam+1.0;
+	
+	/*double a1 = pow(gam,2)-2.0*gam+1.0;
 	dcomp a2 = pow(hvnorm,2)*pow(kvnorm,2);
 	double a3 = pow(gam,2)+a1;
 	double a4 = 1.0-gam;
 	dcomp a5 = pow(gam,2)*a2;
 	dcomp expcorr = exp((-1.0)*hv*dn-kv*dn);
 	double c1 = dens*pow(w,2)/k;
-	double c2 = 1.0/c1;
+	double c2 = 1.0/c1;*/
 	
-	cout << "gamma: " << gam << "\n"
-		<< "a1: " << a1 << "\t a2: " << a2 << "\t a3: " << a3 << "\t a4: " << a4 << "\t a5: " << a5 << "\n"
+	cout << "gamma: " << gam << "\t" << l << "\n";
+		/*<< "a1: " << a1 << "\t a2: " << a2 << "\t a3: " << a3 << "\t a4: " << a4 << "\t a5: " << a5 << "\n"
 		<< "expcorr: " << expcorr << "\n"
-		<< "c1: " << c1 << "\t c2: " << c2 << "\n";
+		<< "c1: " << c1 << "\t c2: " << c2 << "\n";*/
 	
 	dcomp G1212 = a3*CH*CK-(a1+a5)*SH*SK-(a3-1)*expcorr;
 	dcomp G1213 = c2*(CH*SK-pow(hvnorm,2)*SH*CK);
@@ -200,8 +202,9 @@ int main()
 	
 	std::vector<double> vs_sort = vs;
 	std::sort(vs_sort.begin(), vs_sort.end());
-	std::vector<double> c_lim = {0,vs_sort[nlay-1]};
+	std::vector<double> c_lim = {0,vs_sort[nlay-1]-1};
 	c_lim[0] = newton_vr(vp[0], vs[0]);
+	cout << c_lim[0] << "\t" << c_lim[1] << "\n";
 	
 	cout << "Anzahl Schichten: " << nlay << "\n";
 	for(int n=0; n<nlay-1; n++)
@@ -236,7 +239,7 @@ int main()
 				cout << "Geschwindigkeiten: " << vp[n] << "\t" << vs[n] << "\n";
 				
 				if (n==nlay-1){
-					R = compute_T(w[freq], k, vp[n], vs[n], mu);
+					R = compute_T(w[freq], k, vp[n], vs[n], mu, dens[n]);
 					cout << "R-Komponenten: " << std::get<0>(R) << "\t"
 						<< std::get<1>(R) << "\t"
 						<< std::get<2>(R) << "\t"
