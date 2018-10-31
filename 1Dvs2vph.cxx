@@ -19,7 +19,7 @@ const std::complex<double> i(0, 1);
 
 // Perioden in sec
 int np = 1000;
-std::pair<double,double> plim = {1,0.03333};
+std::pair<double,double> plim = {0.1,0.03333333};
 std::vector<double> periods;
 int ip=0;
 //std::vector<double> periods = {0.1,0.5};
@@ -210,8 +210,8 @@ int main()
 	
 	std::vector<double> vs_sort = vs;
 	std::sort(vs_sort.begin(), vs_sort.end());
-	std::vector<double> c_lim = {0,vs_sort[nlay-1]-1};
-	c_lim[0] = newton_vr(vp[0], vs[0]);
+	std::vector<double> c_lim = {0,vs_sort[nlay-1]-0.01};
+	c_lim[0] = newton_vr(vp[0], vs[0])/1.05;
 	//cout << c_lim[0] << "\t" << c_lim[1] << "\n";
 	
 	/*cout << "Anzahl Schichten: " << nlay << "\n";
