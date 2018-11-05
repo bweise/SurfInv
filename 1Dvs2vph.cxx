@@ -19,7 +19,7 @@ const std::complex<double> i(0, 1);
 
 // Perioden in sec
 int np = 1000;
-std::pair<double,double> plim = {0.1,0.03333333};
+std::pair<double,double> plim = {0.1,10};
 std::vector<double> periods;
 int ip=0;
 //std::vector<double> periods = {0.1,0.5};
