@@ -18,14 +18,13 @@ typedef complex<double> dcomp;
 const std::complex<double> i(0, 1.0);
 
 // Perioden in sec
-/*int np = 200;
-std::pair<double,double> plim = {100,1000};
+/*int np = 10000;
+std::pair<double,double> plim = {0.001,0.1};
 std::vector<double> periods;
 int ip=0;*/
 std::vector<double> periods = {0.0001,0.0002,0.0005,0.001,0.002,0.005,0.01,0.02,0.05,0.1,0.2,0.5,1,2,5,10,20,50,100,200,500,1000,2000,5000,10000};
-//std::vector<double> periods = {0.001,0.002,0.003,0.004,0.005,0.006,0.007,0.008,0.009,0.01,0.02,0.03,0.04,0.05,0.06,0.07,0.08,0.09,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1,2,3,4,5};
 
-int nk = 100000; //Anzahl Wellenzahlen zum durchprobieren (min. 2)
+int nk = 1000; //Anzahl Wellenzahlen zum durchprobieren (min. 2)
 
 // Definition 1D Modell
 std::vector<double> depth = {0,25};	// Tiefe Schichtgrenzen [m]
