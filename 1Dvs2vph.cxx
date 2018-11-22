@@ -47,7 +47,7 @@ double newton_vr(double vp, double vs){
 	double vr;
 	double diff=99999.0;
 	while(diff>0.0001){
-		//cout << "vr: " << vrlast << "\t diff: " << diff << "\n";
+		cout << "vr: " << vrlast << "\t diff: " << diff << "\n";
 		double fvr = compute_fvr(vp, vs, vrlast);
 		double dfvr = compute_dfvr(vp, vs, vrlast);
 		//cout << "fvr: " << fvr << "\t dfvr: " << dfvr << "\n";
@@ -55,7 +55,7 @@ double newton_vr(double vp, double vs){
 		diff = sqrt(pow(vr-vrlast,2));
 		vrlast = vr;
 	}
-	//cout << "final vr: " << vr << "\t final diff: " << diff << "\n\n\n";
+	cout << "final vr: " << vr << "\t final diff: " << diff << "\n\n\n";
 	return vr;
 }
 
@@ -114,7 +114,7 @@ std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp> compute_T(double w, double k, double v
 	//cout << "kvert: " << hv << "\t" << kv << "\n";
 	dcomp T1212 = (pow(vs,4)/(4.0*pow(w,4)))*((pow(l,2)/(kv*hv))-4.0*pow(w/c,2));
 	dcomp T1213 = (-1.0)/(4.0*dens*pow(w,2)*kv);
-	dcomp T1214 = (i*pow(vs,2)/(4.0*dens*pow(w,3)*c))*((l/(kv*hv))-2.0);
+	dcomp iT1214 = (i*pow(vs,2)/(4.0*dens*pow(w,3)*c))*((l/(kv*hv))-2.0);
 	dcomp T1224 = (1/(4.0*pow(dens,2)*pow(w,4)))*((pow(w,2)/(pow(c,2)*kv*hv))-1.0);
 	dcomp T1234 = (pow(vs,4)/(4.0*pow(mu,2)*pow(w,4)))*((pow(k,2)/(kv*hv))-1.0);
 	/*cout << "T-Komponenten: " << T1212 << "\t"
@@ -122,7 +122,7 @@ std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp> compute_T(double w, double k, double v
 		<< T1214 << "\t"
 		<< T1224 << "\t"
 		<< T1234 << "\n\n\n";*/
-	return std::make_tuple(T1212,T1213,T1214,T1224,T1234);
+	return std::make_tuple(T1212,T1213,iT1214,T1224,T1234);
 }
 
 std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp> compute_G(double k, double dn, double w, double vp, double vs, double dens){
@@ -166,7 +166,7 @@ std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dco
 std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp> compute_R(double w, double k, double vp, double vs, double dn, double dens, std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp> T){
 	dcomp T1212 = std::get<0>(T);
 	dcomp T1213 = std::get<1>(T);
-	dcomp T1214 = std::get<2>(T);
+	dcomp iT1214 = std::get<2>(T);
 	dcomp T1224 = std::get<3>(T);
 	dcomp T1234 = std::get<4>(T);
 	auto G = compute_G(k,dn,w,vp,vs,dens);
@@ -185,17 +185,58 @@ std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp> compute_R(double w, double k, double v
 	dcomp G2412 = std::get<12>(G);
 	dcomp G2413 = std::get<13>(G);
 	dcomp G3412 = std::get<14>(G);
-	dcomp R1212 = T1212*G1212+T1213*G1312-2.0*T1214*iG1412+T1224*G2412+T1234*G3412;
-	dcomp R1213 = T1212*G1213+T1213*G1313-2.0*T1214*iG1413+T1224*G2413+T1234*G2412;
-	dcomp R1214 = T1212*iG1214+T1213*iG1314+T1214*(2.0*G1414-1.0)+T1224*iG1413+T1234*iG1412;
-	dcomp R1224 = T1212*G1224+T1213*G1324-2.0*T1214*iG1314+T1224*G1313+T1234*G1312;
-	dcomp R1234 = T1212*G1234+T1213*G1224-2.0*T1214*iG1214+T1224*G1213+T1234*G1212;
+	dcomp R1212 = T1212*G1212+T1213*G1312-2.0*iT1214*iG1412+T1224*G2412+T1234*G3412;
+	dcomp R1213 = T1212*G1213+T1213*G1313-2.0*iT1214*iG1413+T1224*G2413+T1234*G2412;
+	dcomp iR1214 = T1212*iG1214+T1213*iG1314+iT1214*(2.0*G1414-1.0)+T1224*iG1413+T1234*iG1412;
+	dcomp R1224 = T1212*G1224+T1213*G1324-2.0*iT1214*iG1314+T1224*G1313+T1234*G1312;
+	dcomp R1234 = T1212*G1234+T1213*G1224-2.0*iT1214*iG1214+T1224*G1213+T1234*G1212;
+	
+	/*double tmpmax, maxR = std::real(R1212);
+	if(maxR<0){
+		maxR = (-1.0)*maxR;
+	}
+	tmpmax = std::real(R1213);
+	if (tmpmax<0){
+		tmpmax = (-1.0)*tmpmax;
+	}
+	if (tmpmax>maxR){
+		maxR = tmpmax;
+	}
+	tmpmax = std::imag(iR1214);
+	if (tmpmax<0){
+		tmpmax = (-1.0)*tmpmax;
+	}
+	if (tmpmax>maxR){
+		maxR = tmpmax;
+	}
+	tmpmax = std::real(R1224);
+	if (tmpmax<0){
+		tmpmax = (-1.0)*tmpmax;
+	}
+	if (tmpmax>maxR){
+		maxR = tmpmax;
+	}
+	tmpmax = std::real(R1234);
+	if (tmpmax<0){
+		tmpmax = (-1.0)*tmpmax;
+	}
+	if (tmpmax>maxR){
+		maxR = tmpmax;
+	}
+	if (maxR>1.0e5){
+		maxR = 1.0e5/maxR;
+		R1212 = maxR*R1212;
+		R1213 = maxR*R1213;
+		iR1214 = maxR*iR1214;
+		R1224 = maxR*R1224;
+		R1234 = maxR*R1234;
+	}*/
 	/*cout << "R-Komponenten: " << R1212 << "\t"
 	<< R1213 << "\t"
-	<< R1214 << "\t"
+	<< iR1214 << "\t"
 	<< R1224 << "\t"
 	<< R1234 << "\n\n\n";*/
-	return std::make_tuple(R1212,R1213,R1214,R1224,R1234);
+	return std::make_tuple(R1212,R1213,iR1214,R1224,R1234);
 }
 
 int main()
@@ -208,7 +249,7 @@ int main()
 	
 	
 	ofstream resultfile;
-	resultfile.open ("example.txt");
+	resultfile.open ("dispersion.out");
 	resultfile << "# Output of 1Dvs2vph:\n# "
 		<< nk << " wavenumbers at " << periods.size() << " Frequencies tested.\n"
 		<<"# Frequency [1/s] \t Phase velocity [m/s] \t R1212 \n";
