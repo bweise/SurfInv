@@ -191,7 +191,7 @@ std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp> compute_R(double w, double k, double v
 	dcomp R1224 = T1212*G1224+T1213*G1324-2.0*iT1214*iG1314+T1224*G1313+T1234*G1312;
 	dcomp R1234 = T1212*G1234+T1213*G1224-2.0*iT1214*iG1214+T1224*G1213+T1234*G1212;
 	
-	/*double tmpmax, maxR = std::real(R1212);
+	double tmpmax, maxR = std::real(R1212);
 	if(maxR<0){
 		maxR = (-1.0)*maxR;
 	}
@@ -230,7 +230,7 @@ std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp> compute_R(double w, double k, double v
 		iR1214 = maxR*iR1214;
 		R1224 = maxR*R1224;
 		R1234 = maxR*R1234;
-	}*/
+	}
 	/*cout << "R-Komponenten: " << R1212 << "\t"
 	<< R1213 << "\t"
 	<< iR1214 << "\t"
