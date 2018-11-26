@@ -18,19 +18,23 @@ typedef complex<double> dcomp;
 const std::complex<double> i(0, 1.0);
 
 // Perioden in sec
-/*int np = 10000;
-std::pair<double,double> plim = {0.001,0.1};
+int np = 100;
+std::pair<double,double> plim = {20,100};
 std::vector<double> periods;
-int ip=0;*/
-std::vector<double> periods = {0.0001,0.0002,0.0005,0.001,0.002,0.005,0.01,0.02,0.05,0.1,0.2,0.5,1,2,5,10,20,50,100,200,500,1000,2000,5000,10000};
+int ip=0;
+//std::vector<double> periods = {10,20,30,40,50,60,70,80,90,100};
 
-int nk = 1000; //Anzahl Wellenzahlen zum durchprobieren (min. 2)
+int nk = 10000; //Anzahl Wellenzahlen zum durchprobieren (min. 2)
 
 // Definition 1D Modell
-std::vector<double> depth = {0,25};	// Tiefe Schichtgrenzen [m]
-std::vector<double> vp = {1350,2000};	// Vp für Schichten [m/s]
-std::vector<double> vs = {250,1000};	// Vs für Schichten [m/s]
-std::vector<double> dens = {2400,2400}; // Dichten [kg/m3]
+/*std::vector<double> depth = {0,12500,25000,37500,50000};	// Tiefe Schichtgrenzen [m]
+std::vector<double> vp = {5190,6060,6930,7790,8660};	// Vp für Schichten [m/s]
+std::vector<double> vs = {3000,3500,4000,4500,5000};	// Vs für Schichten [m/s]
+std::vector<double> dens = {2400,2625,2850,3075,3300}; // Dichten [kg/m3]*/
+std::vector<double> depth = {0,25,50};	// Tiefe Schichtgrenzen [m]
+std::vector<double> vp = {1350,2000,2500};	// Vp für Schichten [m/s]
+std::vector<double> vs = {250,1000,2000};	// Vs für Schichten [m/s]
+std::vector<double> dens = {2400,2400,2500}; // Dichten [kg/m3]
 
 double compute_fvr(double vp, double vs, double vr){
 	double fvr = 4.0-4.0*(pow(vr,2)/pow(vs,2))+pow(vr,4)/pow(vs,4)-4.0*sqrt(1-pow(vr,2)/pow(vp,2))*sqrt(1.0-pow(vr,2)/pow(vs,2));
@@ -192,37 +196,28 @@ std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp> compute_R(double w, double k, double v
 	dcomp R1234 = T1212*G1234+T1213*G1224-2.0*iT1214*iG1214+T1224*G1213+T1234*G1212;
 	
 	double tmpmax, maxR = std::real(R1212);
-	if(maxR<0){
+	if(maxR<0)
 		maxR = (-1.0)*maxR;
-	}
 	tmpmax = std::real(R1213);
-	if (tmpmax<0){
+	if (tmpmax<0)
 		tmpmax = (-1.0)*tmpmax;
-	}
-	if (tmpmax>maxR){
+	if (tmpmax>maxR)
 		maxR = tmpmax;
-	}
 	tmpmax = std::imag(iR1214);
-	if (tmpmax<0){
+	if (tmpmax<0)
 		tmpmax = (-1.0)*tmpmax;
-	}
-	if (tmpmax>maxR){
+	if (tmpmax>maxR)
 		maxR = tmpmax;
-	}
 	tmpmax = std::real(R1224);
-	if (tmpmax<0){
+	if (tmpmax<0)
 		tmpmax = (-1.0)*tmpmax;
-	}
-	if (tmpmax>maxR){
+	if (tmpmax>maxR)
 		maxR = tmpmax;
-	}
 	tmpmax = std::real(R1234);
-	if (tmpmax<0){
+	if (tmpmax<0)
 		tmpmax = (-1.0)*tmpmax;
-	}
-	if (tmpmax>maxR){
+	if (tmpmax>maxR)
 		maxR = tmpmax;
-	}
 	if (maxR>1.0e5){
 		maxR = 1.0e5/maxR;
 		R1212 = maxR*R1212;
@@ -241,11 +236,11 @@ std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp> compute_R(double w, double k, double v
 
 int main()
 {	
-	/*while (ip<=np){
+	while (ip<=np){
 	double p = std::get<0>(plim)+ip*(std::get<1>(plim)-std::get<0>(plim))/np;
 	periods.push_back(p);
 	++ip;
-	}*/
+	}
 	
 	
 	ofstream resultfile;
