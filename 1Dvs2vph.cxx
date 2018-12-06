@@ -16,23 +16,23 @@ using namespace std;
 #include <fstream>
 typedef complex<double> dcomp;
 const std::complex<double> i(0, 1.0);
-bool verbose = 1;
+bool verbose = 0;
 
 // Perioden in sec
-/*int np = 100;
+int np = 100;
 std::pair<double,double> plim = {1,100};
 std::vector<double> periods;
-int ip=0;*/
-std::vector<double> periods = {10};
+int ip=0;
+//std::vector<double> periods = {10};
 
-int nk = 2; //Anzahl Wellenzahlen zum durchprobieren (min. 2)
+int nk = 1000; //Anzahl Wellenzahlen zum durchprobieren (min. 2)
 
 // Definition 1D Modell
-std::vector<double> depth = {0,25};	// Tiefe Schichtgrenzen [m]
+/*std::vector<double> depth = {0,25};	// Tiefe Schichtgrenzen [m]
 std::vector<double> vp = {1350,2000};	// Vp für Schichten [m/s]
 std::vector<double> vs = {250,1000};	// Vs für Schichten [m/s]
 std::vector<double> dens = {2400,2400}; // Dichten [kg/m3]*/
-/*std::vector<double> depth = {0,5000,15000,30000,55000};	// Tiefe Schichtgrenzen [m]
+std::vector<double> depth = {0,5000,15000,30000,55000};	// Tiefe Schichtgrenzen [m]
 std::vector<double> vp = {5190,6060,6930,7790,8660};	// Vp für Schichten [m/s]
 std::vector<double> vs = {3000,3500,4000,4500,5000};	// Vs für Schichten [m/s]
 std::vector<double> dens = {2400,2625,2850,3075,3300}; // Dichten [kg/m3]*/
@@ -117,25 +117,28 @@ std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,double,dcomp,dcomp,double> comput
 	return std::make_tuple(hv, kv, SH, CH, SK, CK, gam, hvnorm, kvnorm, l);
 }
 
-std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp> compute_T(double w, double k, double vp, double vs, double mu, double dens){
+std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp> compute_T(double w, double k, double vp, double vs, double mu){
 	double c = w/k;
 	auto util = compute_util(w, k, vp, vs, 99999, 1);
 	dcomp hv = std::get<0>(util);
 	dcomp kv = std::get<1>(util);
 	dcomp l = std::get<9>(util);
+	
+	dcomp fact = pow((-1.0)*pow(vs,2)/(2*mu*hv*kv*pow(w,2)),2);
 
-	dcomp T1212 = (pow(vs,4)/(4.0*pow(w,4)))*((pow(l,2)/(kv*hv))-4.0*pow(w/c,2));
-	dcomp T1213 = (pow(vs,2)/(4.0*dens*kv*pow(w,4)))*(l-2.0*pow(w/c,2));
-	dcomp iT1214 = (i*pow(vs,2)/(4.0*dens*pow(w,3)*c))*((l/(kv*hv))-2.0);
-	dcomp T1224 = (pow(vs,2)/(4.0*dens*hv*pow(w,4)))*(2.0*pow(w/c,2)-l);
-	dcomp T1234 = (pow(vs,4)/(4.0*pow(mu,2)*pow(w,4)))*((pow(k,2)/(kv*hv))-1.0);
+	dcomp T1212 = pow(mu,2)*kv*hv*(pow(l,2)-4.0*pow(k,2)*kv*hv)*fact;
+	dcomp T1213 = mu*pow(hv,2)*kv*(l-2.0*pow(k,2))*fact;
+	dcomp iT1214 = 1.0*k*mu*hv*kv*(l-2.0*hv*kv)*fact;
+	dcomp T1224 = mu*hv*pow(kv,2)*(2.0*pow(k,2)-l)*fact;
+	dcomp T1234 = hv*kv*(pow(k,2)-hv*kv)*fact;
 	
 	if (verbose==1) {
-		cout << "T1212: " << T1212 << "\t"
+		cout << "factor: " << fact << "\n"
+			<< "T1212: " << T1212 << "\t"
 			<< "T1213: " << T1213 << "\t"
 			<< "iT1214: " << iT1214 << "\t"
 			<< "T1224: " << T1224 << "\t"
-			<< "T1234: " << T1234 << "\n\n\n";
+			<< "T1234: " << T1234 << "\n\n";
 	}
 	return std::make_tuple(T1212,T1213,iT1214,T1224,T1234);
 }
@@ -151,17 +154,17 @@ std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dco
 	dcomp hvnorm = std::get<7>(kvert);
 	dcomp kvnorm = std::get<8>(kvert);
 	
-	dcomp G1212 = 2.0*gam*(1.0-gam) + (2.0*pow(gam,2) - 2.0*gam + 1.0)*CH*CK - (pow(1.0-gam,2) + pow(gam,2)*pow(hvnorm,2)*pow(kvnorm,2))*SH*SK;
+	dcomp G1212 = 2.0*gam * (1.0-gam) + (2.0*pow(gam,2)-2.0*gam+1.0) * CH*CK - (pow(1.0-gam,2) + pow(gam,2)*pow(hvnorm,2)*pow(kvnorm,2))*SH*SK;
 	dcomp G1213 = (1.0/(dens*w*c))*(CH*SK - SH*CK*pow(hvnorm,2));
-	dcomp iG1214 = (i/(dens*w*c))*((1.0 - 2.0*gam)*(1.0-CK*CH) + (1.0 - gam - gam*pow(hvnorm,2)*pow(kvnorm,2))*SH*SK);
+	dcomp iG1214 = (1.0/(dens*w*c))*((1.0 - 2.0*gam)*(1.0-CK*CH) + (1.0 - gam - gam*pow(hvnorm,2)*pow(kvnorm,2))*SH*SK);
 	dcomp G1224 = (1.0/(dens*w*c))*(pow(kvnorm,2)*CH*SK - SH*CK);
 	dcomp G1234 = (-1.0/(pow(dens,2)*pow(w,2)*pow(c,2)))*(2.0*(1.0 - CH*CK) + (1.0 + pow(kvnorm,2)*pow(hvnorm,2))*SK*SH);
 	dcomp G1312 = dens*w*c*(pow(gam,2)*pow(kvnorm,2)*CH*SK - pow(1.0-gam,2)*SH*CK);
 	dcomp G1313 = CH*CK;
-	dcomp iG1314 = i*((1.0 - gam)*SH*CK + gam*pow(kvnorm,2)*CH*SK);
+	dcomp iG1314 = 1.0*((1.0 - gam)*SH*CK + gam*pow(kvnorm,2)*CH*SK);
 	dcomp G1324 = (-1.0)*pow(kvnorm,2)*SH*SK;
-	dcomp iG1412 = i*dens*w*c*((3.0*pow(gam,2) - 2.0*pow(gam,3) - gam)*(1.0 - CH*CK)+(pow(1.0 - gam,3) - pow(gam,3)*pow(hvnorm,2)*pow(kvnorm,2))*SH*SK);
-	dcomp iG1413 = (-1.0)*i*((1.0 - gam)*CH*SK + gam*pow(hvnorm,2)*SH*CK);
+	dcomp iG1412 = 1.0*dens*w*c*((3.0*pow(gam,2) - 2.0*pow(gam,3) - gam)*(1.0 - CH*CK)+(pow(1.0 - gam,3) - pow(gam,3)*pow(hvnorm,2)*pow(kvnorm,2))*SH*SK);
+	dcomp iG1413 = (-1.0)*1.0*((1.0 - gam)*CH*SK + gam*pow(hvnorm,2)*SH*CK);
 	dcomp G1414 = 1.0 - 2.0*gam*(1.0 - gam)*(1.0 - CH*CK) + (pow(1.0 - gam,2) + pow(gam,2)*pow(kvnorm,2)*pow(hvnorm,2))*SH*SK;
 	dcomp G2412 = dens*w*c*(pow(1.0 - gam,2)*CH*SK - pow(gam,2)*SH*CK*pow(hvnorm,2));
 	dcomp G2413 = (-1.0)*pow(hvnorm,2)*SH*SK;
@@ -201,6 +204,7 @@ std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp> compute_R(double w, double k, double v
 	dcomp G2412 = std::get<12>(G);
 	dcomp G2413 = std::get<13>(G);
 	dcomp G3412 = std::get<14>(G);
+	
 	dcomp R1212 = T1212*G1212 + T1213*G1312 - 2.0*iT1214*iG1412 + T1224*G2412 + T1234*G3412;
 	dcomp R1213 = T1212*G1213 + T1213*G1313 - 2.0*iT1214*iG1413 + T1224*G2413 + T1234*G2412;
 	dcomp iR1214 = T1212*iG1214 + T1213*iG1314 + iT1214*(2.0*G1414-1.0) + T1224*iG1413 + T1234*iG1412;
@@ -252,11 +256,11 @@ std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp> compute_R(double w, double k, double v
 
 int main()
 {	
-	/*while (ip<=np){
-	double p = std::get<0>(plim)+ip*(std::get<1>(plim)-std::get<0>(plim))/np;
-	periods.push_back(p);
-	++ip;
-	}*/
+	while (ip<=np){
+		double p = std::get<0>(plim)+ip*(std::get<1>(plim)-std::get<0>(plim))/np;
+		periods.push_back(p);
+		++ip;
+	}
 	
 	
 	ofstream resultfile;
@@ -314,7 +318,7 @@ int main()
 					cout << "Geschwindigkeiten: " << vp[n] << "\t" << vs[n] << "\n";
 				}
 				if (n==nlay-1){
-					R = compute_T(w[freq], k, vp[n], vs[n], mu, dens[n]);
+					R = compute_T(w[freq], k, vp[n], vs[n], mu);
 				}
 				else {
 					double dn = depth[n+1]-depth[n];
