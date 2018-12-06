@@ -16,25 +16,26 @@ using namespace std;
 #include <fstream>
 typedef complex<double> dcomp;
 const std::complex<double> i(0, 1.0);
+bool verbose = 1;
 
 // Perioden in sec
-int np = 100;
+/*int np = 100;
 std::pair<double,double> plim = {1,100};
 std::vector<double> periods;
-int ip=0;
-//std::vector<double> periods = {1,10,20,30,40,50,60,80,100};
+int ip=0;*/
+std::vector<double> periods = {10};
 
-int nk = 1000; //Anzahl Wellenzahlen zum durchprobieren (min. 2)
+int nk = 2; //Anzahl Wellenzahlen zum durchprobieren (min. 2)
 
 // Definition 1D Modell
-/*std::vector<double> depth = {0,25};	// Tiefe Schichtgrenzen [m]
+std::vector<double> depth = {0,25};	// Tiefe Schichtgrenzen [m]
 std::vector<double> vp = {1350,2000};	// Vp für Schichten [m/s]
 std::vector<double> vs = {250,1000};	// Vs für Schichten [m/s]
 std::vector<double> dens = {2400,2400}; // Dichten [kg/m3]*/
-std::vector<double> depth = {0,5000,15000,30000,55000};	// Tiefe Schichtgrenzen [m]
+/*std::vector<double> depth = {0,5000,15000,30000,55000};	// Tiefe Schichtgrenzen [m]
 std::vector<double> vp = {5190,6060,6930,7790,8660};	// Vp für Schichten [m/s]
 std::vector<double> vs = {3000,3500,4000,4500,5000};	// Vs für Schichten [m/s]
-std::vector<double> dens = {2400,2625,2850,3075,3300}; // Dichten [kg/m3]
+std::vector<double> dens = {2400,2625,2850,3075,3300}; // Dichten [kg/m3]*/
 
 double compute_fvr(double vp, double vs, double vr){
 	double fvr = 4.0-4.0*(pow(vr,2)/pow(vs,2))+pow(vr,4)/pow(vs,4)-4.0*sqrt(1-pow(vr,2)/pow(vp,2))*sqrt(1.0-pow(vr,2)/pow(vs,2));
@@ -51,7 +52,7 @@ double newton_vr(double vp, double vs){
 	double vr;
 	double diff=99999.0;
 	while(diff>0.0001){
-		cout << "vr: " << vrlast << "\t diff: " << diff << "\n";
+		//cout << "vr: " << vrlast << "\t diff: " << diff << "\n";
 		double fvr = compute_fvr(vp, vs, vrlast);
 		double dfvr = compute_dfvr(vp, vs, vrlast);
 		//cout << "fvr: " << fvr << "\t dfvr: " << dfvr << "\n";
@@ -59,7 +60,8 @@ double newton_vr(double vp, double vs){
 		diff = sqrt(pow(vr-vrlast,2));
 		vrlast = vr;
 	}
-	cout << "final vr: " << vr << "\t final diff: " << diff << "\n\n";
+	if (verbose == 1)
+		cout << "vr: " << vr << "\t final diff: " << diff << "\n\n";
 	return vr;
 }
 
@@ -104,6 +106,14 @@ std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,double,dcomp,dcomp,double> comput
 	dcomp hvnorm = hv/k;
 	dcomp kvnorm = kv/k;
 	double l = 2.0*pow(k,2)-pow(w/vs,2);
+	
+	if (verbose==1){
+		cout << "hv: " << hv << " kv: " << kv << "\n"
+			<< "hvnorm: " << hvnorm << " kvnorm: " << kvnorm << "\n"
+			<< "SH: " << SH << " SK: " << SK << " CH: " << CH << " CK: " << CK << "\n"
+			<< "gamma: " << gam << " l: " << l << "\n\n";
+	}
+	
 	return std::make_tuple(hv, kv, SH, CH, SK, CK, gam, hvnorm, kvnorm, l);
 }
 
@@ -113,17 +123,20 @@ std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp> compute_T(double w, double k, double v
 	dcomp hv = std::get<0>(util);
 	dcomp kv = std::get<1>(util);
 	dcomp l = std::get<9>(util);
-	cout << "kvert: " << hv << "\t" << kv << "\n";
+
 	dcomp T1212 = (pow(vs,4)/(4.0*pow(w,4)))*((pow(l,2)/(kv*hv))-4.0*pow(w/c,2));
 	dcomp T1213 = (pow(vs,2)/(4.0*dens*kv*pow(w,4)))*(l-2.0*pow(w/c,2));
 	dcomp iT1214 = (i*pow(vs,2)/(4.0*dens*pow(w,3)*c))*((l/(kv*hv))-2.0);
 	dcomp T1224 = (pow(vs,2)/(4.0*dens*hv*pow(w,4)))*(2.0*pow(w/c,2)-l);
 	dcomp T1234 = (pow(vs,4)/(4.0*pow(mu,2)*pow(w,4)))*((pow(k,2)/(kv*hv))-1.0);
-	cout << "T-Komponenten: " << T1212 << "\t"
-		<< T1213 << "\t"
-		<< iT1214 << "\t"
-		<< T1224 << "\t"
-		<< T1234 << "\n\n\n";
+	
+	if (verbose==1) {
+		cout << "T1212: " << T1212 << "\t"
+			<< "T1213: " << T1213 << "\t"
+			<< "iT1214: " << iT1214 << "\t"
+			<< "T1224: " << T1224 << "\t"
+			<< "T1234: " << T1234 << "\n\n\n";
+	}
 	return std::make_tuple(T1212,T1213,iT1214,T1224,T1234);
 }
 
@@ -137,10 +150,7 @@ std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dco
 	dcomp gam = std::get<6>(kvert);
 	dcomp hvnorm = std::get<7>(kvert);
 	dcomp kvnorm = std::get<8>(kvert);
-	cout << "kvert (normiert): " << hvnorm << "\t" << kvnorm << "\n"
-		<< "SH: " << SH << "\t CH: " << CH << "\n"
-		<< "SK: " << SK << "\t CK: " << CK << "\n"
-		<< "gamma: " << gam << "\n";
+	
 	dcomp G1212 = 2.0*gam*(1.0-gam) + (2.0*pow(gam,2) - 2.0*gam + 1.0)*CH*CK - (pow(1.0-gam,2) + pow(gam,2)*pow(hvnorm,2)*pow(kvnorm,2))*SH*SK;
 	dcomp G1213 = (1.0/(dens*w*c))*(CH*SK - SH*CK*pow(hvnorm,2));
 	dcomp iG1214 = (i/(dens*w*c))*((1.0 - 2.0*gam)*(1.0-CK*CH) + (1.0 - gam - gam*pow(hvnorm,2)*pow(kvnorm,2))*SH*SK);
@@ -156,11 +166,16 @@ std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dco
 	dcomp G2412 = dens*w*c*(pow(1.0 - gam,2)*CH*SK - pow(gam,2)*SH*CK*pow(hvnorm,2));
 	dcomp G2413 = (-1.0)*pow(hvnorm,2)*SH*SK;
 	dcomp G3412 = (-1.0)*pow(dens,2)*pow(w,2)*pow(c,2)*(2.0*pow(gam,2)*pow(1.0 - gam,2)*(1.0 - CH*CK) + (pow(1.0 - gam,4)+pow(gam,4)*pow(hvnorm,2)*pow(kvnorm,2))*SH*SK);
-	cout << "G-Komponenten:\n" << G1212 << "\t" << G1213 << "\t" << iG1214 << "\t" << G1224 << "\t" << G1234 << "\n"
-		<< G1312 << "\t" << G1313 << "\t" << iG1314 << "\t" << G1324 << "\n"
-		<< iG1412 << "\t" << iG1413 << "\t" << "\n"
-		<< G2412 << "\t" << G2413 << "\n"
-		<< G3412 << "\t" << "\n";
+	
+	if (verbose==1){
+		cout << "G-Komponenten:\n"
+			<< "G1212: " << G1212 << " G1213: " << G1213 << " iG1214: " << iG1214 << " G1224: " << G1224 << " G1234: " << G1234 << "\n"
+			<< "G1312: " << G1312 << " G1313: " << G1313 << " iG1314: " << iG1314 << " G1324: " << G1324 << "\n"
+			<< "iG1412: " << iG1412 << " iG1413: " << iG1413 << " G1414: " << G1414 << "\n"
+			<< "G2412: " << G2412 << " G2413: " << G2413 << "\n"
+			<< "G3412: " << G3412 << "\n\n";
+	}
+		
 	return std::make_tuple(G1212,G1213,iG1214,G1224,G1234,G1312,G1313,iG1314,G1324,iG1412,iG1413,G1414,G2412,G2413,G3412);
 }
 
@@ -223,21 +238,25 @@ std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp> compute_R(double w, double k, double v
 		R1224 = maxR*R1224;
 		R1234 = maxR*R1234;
 	}
-	cout << "R-Komponenten: " << R1212 << "\t"
-	<< R1213 << "\t"
-	<< iR1214 << "\t"
-	<< R1224 << "\t"
-	<< R1234 << "\n\n\n";
+	
+	if (verbose==1) {
+		cout << "R1212: " << R1212 << "\n"
+		<< "R1213: " << R1213 << "\n"
+		<< "iR1214: " << iR1214 << "\n"
+		<< "R1224: " << R1224 << "\n"
+		<< "R1234: " << R1234 << "\n\n";
+	}
+	
 	return std::make_tuple(R1212,R1213,iR1214,R1224,R1234);
 }
 
 int main()
 {	
-	while (ip<=np){
+	/*while (ip<=np){
 	double p = std::get<0>(plim)+ip*(std::get<1>(plim)-std::get<0>(plim))/np;
 	periods.push_back(p);
 	++ip;
-	}
+	}*/
 	
 	
 	ofstream resultfile;
@@ -252,26 +271,31 @@ int main()
 	std::vector<double> c_lim = {0,0};
 	c_lim[0] = newton_vr(vp[0], vs[0])/1.05;
 	c_lim[1] = newton_vr(vp[nlay-1], vs[nlay-1])*1.05;
-	cout << c_lim[0] << "\t" << c_lim[1] << "\n";
+	
+	if(verbose==1){
+	cout << "cmin: " << c_lim[0] << "\t cmax: " << c_lim[1] << "\n";
 	
 	cout << "Anzahl Schichten: " << nlay << "\n";
-	for(int n=0; n<nlay-1; n++)
-		cout << "Schicht " << n+1 << " von " << depth[n] << " bis "
-			<< depth[n+1] << " m mit vs = " << vs[n] << " m/s, vp = "
-			<< vp[n] << " m/s und " << dens[n] << " kg/m3 Dichte.\n";
-	cout << "Letzte Schicht ab " << depth[nlay-1] << " m: vs = "
-		<< vs[nlay-1] << " m/s, vp = " << vp[nlay-1]
-		<< " m/s, Dichte = " << dens[nlay-1] << " kg/m3.\n";
+		for(int n=0; n<nlay-1; n++)
+			cout << "Schicht " << n+1 << " von " << depth[n] << " bis "
+				<< depth[n+1] << " m mit vs = " << vs[n] << " m/s, vp = "
+				<< vp[n] << " m/s und " << dens[n] << " kg/m3 Dichte.\n";
+		cout << "Letzte Schicht ab " << depth[nlay-1] << " m: vs = "
+			<< vs[nlay-1] << " m/s, vp = " << vp[nlay-1]
+			<< " m/s, Dichte = " << dens[nlay-1] << " kg/m3.\n";
 		
-	cout << "Kreisfrequenzen:\t";
+		cout << "Kreisfrequenzen:\t";
+	}
 	std::vector<double> w;
 	for(int n=0; n<periods.size(); n++){
 		w.push_back(2*M_PI/periods[n]);
-		cout << w[n] << " rad/s\n";
+		if (verbose==1)
+			cout << w[n] << " rad/s\n";
 	}
 	
-	double mu = vs[nlay-1]*dens[nlay-1]; // Shear modulus unterste Schicht
-	cout << "Schermodul unterste Schicht: " << mu << "\n\n\n";
+	double mu = pow(vs[nlay-1],2)*dens[nlay-1]; // Shear modulus unterste Schicht
+	if (verbose==1)
+		cout << "Schermodul unterste Schicht: " << mu << "\n\n";
 
 	for(int freq=0; freq<w.size(); freq++){
 		std::vector<double> k_lim = {w[freq]/c_lim[0],w[freq]/c_lim[1]};
@@ -279,19 +303,23 @@ int main()
 		for(int kint=0; kint<nk; kint++){
 			kk=kint;
 			double k=k_lim[0]-kint*(k_lim[0]-k_lim[1])/(nk-1);
-			cout << "Aktuelle Kreisfreq. & Wellenzahl: " << w[freq] << "\t" << k << "\n";
+			if (verbose==1)
+				cout << "Aktuelle Kreisfreq. & Wellenzahl: " << w[freq] << "\t" << k << "\n";
 			
 			std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp> R;
 			
 			for(int n=nlay-1;n>=0;n--){
-				cout << "Schicht: " << n+1 << "\n";
-				cout << "Geschwindigkeiten: " << vp[n] << "\t" << vs[n] << "\n";
+				if (verbose==1){
+					cout << "Schicht: " << n+1 << "\n";
+					cout << "Geschwindigkeiten: " << vp[n] << "\t" << vs[n] << "\n";
+				}
 				if (n==nlay-1){
 					R = compute_T(w[freq], k, vp[n], vs[n], mu, dens[n]);
 				}
 				else {
 					double dn = depth[n+1]-depth[n];
-					cout << "Schichtdicke: " << dn << "m\n";
+					if (verbose==1)
+						cout << "Schichtdicke: " << dn << "m\n";
 					R = compute_R(w[freq], k, vp[n], vs[n], dn, dens[n], R);
 				}
 			}
