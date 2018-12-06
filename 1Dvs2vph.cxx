@@ -19,13 +19,13 @@ const std::complex<double> i(0, 1.0);
 bool verbose = 0;
 
 // Perioden in sec
-int np = 100;
+/*int np = 100;
 std::pair<double,double> plim = {1,100};
 std::vector<double> periods;
-int ip=0;
-//std::vector<double> periods = {10};
+int ip=0;*/
+std::vector<double> periods = {1,10,20,30,40,50,60,80,100};
 
-int nk = 1000; //Anzahl Wellenzahlen zum durchprobieren (min. 2)
+int nk = 10000; //Anzahl Wellenzahlen zum durchprobieren (min. 2)
 
 // Definition 1D Modell
 /*std::vector<double> depth = {0,25};	// Tiefe Schichtgrenzen [m]
@@ -256,11 +256,11 @@ std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp> compute_R(double w, double k, double v
 
 int main()
 {	
-	while (ip<=np){
+	/*while (ip<=np){
 		double p = std::get<0>(plim)+ip*(std::get<1>(plim)-std::get<0>(plim))/np;
 		periods.push_back(p);
 		++ip;
-	}
+	}*/
 	
 	
 	ofstream resultfile;
