@@ -37,6 +37,8 @@ std::vector<double> vp = {5190,6060,6930,7790,8660};	// Vp für Schichten [m/s]
 std::vector<double> vs = {3000,3500,4000,4500,5000};	// Vs für Schichten [m/s]
 std::vector<double> dens = {2400,2625,2850,3075,3300}; // Dichten [kg/m3]*/
 
+int nlay = depth.size();
+
 double compute_fvr(double vp, double vs, double vr){
 	double fvr = 4.0-4.0*(pow(vr,2)/pow(vs,2))+pow(vr,4)/pow(vs,4)-4.0*sqrt(1-pow(vr,2)/pow(vp,2))*sqrt(1.0-pow(vr,2)/pow(vs,2));
 	return fvr;
@@ -254,6 +256,25 @@ std::tuple<double,double,double,double,double> compute_R(double w, double k, dou
 	return std::make_tuple(R1212,R1213,iR1214,R1224,R1234);
 }
 
+double compute_R1212(double w, double k, std::vector<double> vp, std::vector<double> vs, double mu, std::vector<double> depth, std::vector<double> dens){
+	std::tuple<double,double,double,double,double> R;
+	for(int n=nlay-1;n>=0;n--){
+		if (verbose==1){
+			cout << "Schicht: " << n+1 << "\n";
+			cout << "Geschwindigkeiten: " << vp[n] << "\t" << vs[n] << "\n";
+		}
+		if (n==nlay-1)
+			R = compute_T(w, k, vp[n], vs[n], mu);
+		else {
+			double dn = depth[n+1]-depth[n];
+			if (verbose==1)
+				cout << "Schichtdicke: " << dn << "m\n";
+			R = compute_R(w, k, vp[n], vs[n], dn, dens[n], R);
+		}
+	}
+	return(std::get<0>(R));
+}
+
 int main()
 {	
 	/*while (ip<=np){
@@ -268,18 +289,15 @@ int main()
 	resultfile << "# Output of 1Dvs2vph:\n# "
 		<< nk << " wavenumbers at " << periods.size() << " Frequencies tested.\n"
 		<<"# Frequency [1/s] \t Phase velocity [m/s] \t R1212 \n";
-	int nlay = depth.size();
 	
-	std::vector<double> vs_sort = vs;
-	std::sort(vs_sort.begin(), vs_sort.end());
 	std::vector<double> c_lim = {0,0};
 	c_lim[0] = newton_vr(vp[0], vs[0])/1.05;
 	c_lim[1] = newton_vr(vp[nlay-1], vs[nlay-1])*1.05;
 	
 	if(verbose==1){
-	cout << "cmin: " << c_lim[0] << "\t cmax: " << c_lim[1] << "\n";
+		cout << "cmin: " << c_lim[0] << "\t cmax: " << c_lim[1] << "\n";
+		cout << "Anzahl Schichten: " << nlay << "\n";
 	
-	cout << "Anzahl Schichten: " << nlay << "\n";
 		for(int n=0; n<nlay-1; n++)
 			cout << "Schicht " << n+1 << " von " << depth[n] << " bis "
 				<< depth[n+1] << " m mit vs = " << vs[n] << " m/s, vp = "
@@ -290,6 +308,7 @@ int main()
 		
 		cout << "Kreisfrequenzen:\t";
 	}
+	
 	std::vector<double> w;
 	for(int n=0; n<periods.size(); n++){
 		w.push_back(2*M_PI/periods[n]);
@@ -303,33 +322,19 @@ int main()
 
 	for(int freq=0; freq<w.size(); freq++){
 		std::vector<double> k_lim = {w[freq]/c_lim[0],w[freq]/c_lim[1]};
-		int kk;
+		
 		for(int kint=0; kint<nk; kint++){
-			kk=kint;
 			double k=k_lim[0]-kint*(k_lim[0]-k_lim[1])/(nk-1);
+			
 			if (verbose==1)
 				cout << "Aktuelle Kreisfreq. & Wellenzahl: " << w[freq] << "\t" << k << "\n";
 			
-			std::tuple<double,double,double,double,double> R;
+			double R1212 = compute_R1212(w[freq], k, vp, vs, mu, depth, dens);
 			
-			for(int n=nlay-1;n>=0;n--){
-				if (verbose==1){
-					cout << "Schicht: " << n+1 << "\n";
-					cout << "Geschwindigkeiten: " << vp[n] << "\t" << vs[n] << "\n";
-				}
-				if (n==nlay-1){
-					R = compute_T(w[freq], k, vp[n], vs[n], mu);
-				}
-				else {
-					double dn = depth[n+1]-depth[n];
-					if (verbose==1)
-						cout << "Schichtdicke: " << dn << "m\n";
-					R = compute_R(w[freq], k, vp[n], vs[n], dn, dens[n], R);
-				}
-			}
-			resultfile << "\n" << w[freq]/(2*M_PI) << "\t" << w[freq]/k << "\t" << std::real(std::get<0>(R));
+			resultfile << "\n" << w[freq]/(2*M_PI) << "\t" << w[freq]/k << "\t" << R1212;
 		}
 	}
+	
 	resultfile.close();
 	return 0;
 }
