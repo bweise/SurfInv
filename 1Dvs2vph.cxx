@@ -8,7 +8,6 @@
 using namespace std;
 #include <iostream>
 #include <vector>
-//#include <math.h>
 #include <complex>
 #include <cmath>
 #include <tuple>
@@ -19,25 +18,13 @@ const std::complex<double> i(0, 1.0);
 bool verbose = 0;
 
 // Perioden in sec
-/*int np = 100;
-std::pair<double,double> plim = {1,100};
-std::vector<double> periods;
-int ip=0;*/
 std::vector<double> periods = {1,10,20,30,40,50,60,80,100};
 
-int nk = 10000; //Anzahl Wellenzahlen zum durchprobieren (min. 2)
-
 // Definition 1D Modell
-/*std::vector<double> depth = {0,25};	// Tiefe Schichtgrenzen [m]
-std::vector<double> vp = {1350,2000};	// Vp für Schichten [m/s]
-std::vector<double> vs = {250,1000};	// Vs für Schichten [m/s]
-std::vector<double> dens = {2400,2400}; // Dichten [kg/m3]*/
 std::vector<double> depth = {0,5000,15000,30000,55000};	// Tiefe Schichtgrenzen [m]
 std::vector<double> vp = {5190,6060,6930,7790,8660};	// Vp für Schichten [m/s]
 std::vector<double> vs = {3000,3500,4000,4500,5000};	// Vs für Schichten [m/s]
 std::vector<double> dens = {2400,2625,2850,3075,3300}; // Dichten [kg/m3]*/
-
-int nlay = depth.size();
 
 double compute_fvr(double vp, double vs, double vr){
 	double fvr = 4.0-4.0*(pow(vr,2)/pow(vs,2))+pow(vr,4)/pow(vs,4)-4.0*sqrt(1-pow(vr,2)/pow(vp,2))*sqrt(1.0-pow(vr,2)/pow(vs,2));
@@ -54,10 +41,8 @@ double newton_vr(double vp, double vs){
 	double vr;
 	double diff=99999.0;
 	while(diff>0.0001){
-		//cout << "vr: " << vrlast << "\t diff: " << diff << "\n";
 		double fvr = compute_fvr(vp, vs, vrlast);
 		double dfvr = compute_dfvr(vp, vs, vrlast);
-		//cout << "fvr: " << fvr << "\t dfvr: " << dfvr << "\n";
 		vr = vrlast - fvr/dfvr;
 		diff = sqrt(pow(vr-vrlast,2));
 		vrlast = vr;
@@ -255,7 +240,7 @@ std::tuple<double,double,double,double,double> compute_R(double w, double c, dou
 	return std::make_tuple(R1212,R1213,iR1214,R1224,R1234);
 }
 
-double compute_R1212(double w, double c, std::vector<double> vp, std::vector<double> vs, double mu, std::vector<double> depth, std::vector<double> dens){
+double compute_R1212(double w, double c, std::vector<double> vp, std::vector<double> vs, double mu, std::vector<double> depth, std::vector<double> dens, int nlay){
 	std::tuple<double,double,double,double,double> R;
 	for(int n=nlay-1;n>=0;n--){
 		if (verbose==1){
@@ -274,24 +259,20 @@ double compute_R1212(double w, double c, std::vector<double> vp, std::vector<dou
 	return(std::get<0>(R));
 }
 
-int main()
-{	
-	/*while (ip<=np){
-		double p = std::get<0>(plim)+ip*(std::get<1>(plim)-std::get<0>(plim))/np;
-		periods.push_back(p);
-		++ip;
-	}*/
-	
-	
+int main(){
+	int nlay = depth.size();
+
 	ofstream resultfile;
 	resultfile.open ("dispersion.out");
-	resultfile << "# Output of 1Dvs2vph:\n# "
-		<< nk << " wavenumbers at " << periods.size() << " Frequencies tested.\n"
-		<<"# Frequency [1/s] \t Phase velocity [m/s] \t R1212 \n";
+	resultfile << "# No. of Periods \t Period [s] \t Phase velocity 1 [m/s] \t Phase velocity 2 [m/s]";
 	
 	std::vector<double> c_lim = {0,0};
 	c_lim[0] = newton_vr(vp[0], vs[0])/1.05;
 	c_lim[1] = newton_vr(vp[nlay-1], vs[nlay-1])*1.05;
+
+	auto vsmin = *std::min_element(vs.begin(),vs.end());
+	double stepratio = (vsmin - c_lim[0])/(2*vsmin);
+	
 	
 	if(verbose==1){
 		cout << "cmin: " << c_lim[0] << "\t cmax: " << c_lim[1] << "\n";
@@ -317,25 +298,36 @@ int main()
 	
 	double mu = pow(vs[nlay-1],2)*dens[nlay-1]; // Shear modulus unterste Schicht
 	if (verbose==1)
-		cout << "Schermodul unterste Schicht: " << mu << "\n\n";
+		cout << "Schermodul unterste Schicht: " << mu << "\n"
+			<< "Polarisation von R1212 für geringe Geschwindigkeit: \n\n";
+		
+	double R1212 = compute_R1212(2*M_PI/200, c_lim[0], vp, vs, mu, depth, dens, nlay);
+	bool pol0 = signbit(R1212);	
 
 	for(int freq=0; freq<w.size(); freq++){
-		std::vector<double> k_lim = {w[freq]/c_lim[0],w[freq]/c_lim[1]};
+		int citer = 0;
+		double c0, c1;
+		bool pol1 = pol0;
 		
-		for(int kint=0; kint<nk; kint++){
-			double k=k_lim[0]-kint*(k_lim[0]-k_lim[1])/(nk-1);
-			double c = w[freq]/k;
+		while (pol1==pol0){
+			citer = citer + 1;
+			if (citer==1)
+				c1 = c_lim[0];
+			else{
+				c0 = c1;
+				c1 = c0 + c0*stepratio;
+			}
 			
 			if (verbose==1)
-				cout << "Aktuelle Kreisfreq. & Geschwindigkeit: " << w[freq] << "\t" << c << "\n";
+				cout << "Aktuelle Kreisfreq. & Geschwindigkeit: " << w[freq] << "\t" << c1 << "\n";
 			
-			double R1212 = compute_R1212(w[freq], c, vp, vs, mu, depth, dens);
+			R1212 = compute_R1212(w[freq], c1, vp, vs, mu, depth, dens, nlay);
+			pol1 = signbit(R1212);
 			
-			resultfile << "\n" << w[freq]/(2*M_PI) << "\t" << c << "\t" << R1212;
 		}
+		resultfile << "\n" << freq+1 << "\t" << (2*M_PI)/w[freq] << "\t" << c0 << "\t" << c1;
 	}
 	
 	resultfile.close();
 	return 0;
 }
-
