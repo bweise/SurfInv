@@ -65,9 +65,9 @@ double newton_vr(double vp, double vs){
 	return vr;
 }
 
-std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,double,dcomp,dcomp,double> compute_util(double w, double k, double vp, double vs, double dn, bool botlay){
-	dcomp mh, mk, hv, kv, SH, CH, SK, CK;
-	double c = w/k;
+std::tuple<dcomp,dcomp,double,double,double,double,double,dcomp,dcomp,double> compute_util(double w, double k, double vp, double vs, double dn, bool botlay){
+	dcomp hv, kv;
+	double SH, CH, SK, CK, mh, mk, c = w/k;
 	if (c < vp){
 		mh = sqrt(pow(w/c,2)-pow(w/vp,2));
 		hv = mh;
@@ -117,20 +117,20 @@ std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,double,dcomp,dcomp,double> comput
 	return std::make_tuple(hv, kv, SH, CH, SK, CK, gam, hvnorm, kvnorm, l);
 }
 
-std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp> compute_T(double w, double k, double vp, double vs, double mu){
+std::tuple<double,double,double,double,double> compute_T(double w, double k, double vp, double vs, double mu){
 	double c = w/k;
 	auto util = compute_util(w, k, vp, vs, 99999, 1);
 	dcomp hv = std::get<0>(util);
 	dcomp kv = std::get<1>(util);
-	dcomp l = std::get<9>(util);
+	double l = std::get<9>(util);
 	
 	dcomp fact = pow((-1.0)*pow(vs,2)/(2*mu*hv*kv*pow(w,2)),2);
 
-	dcomp T1212 = pow(mu,2)*kv*hv*(pow(l,2)-4.0*pow(k,2)*kv*hv)*fact;
-	dcomp T1213 = mu*pow(hv,2)*kv*(l-2.0*pow(k,2))*fact;
-	dcomp iT1214 = 1.0*k*mu*hv*kv*(l-2.0*hv*kv)*fact;
-	dcomp T1224 = mu*hv*pow(kv,2)*(2.0*pow(k,2)-l)*fact;
-	dcomp T1234 = hv*kv*(pow(k,2)-hv*kv)*fact;
+	double T1212 = std::real(pow(mu,2)*kv*hv*(pow(l,2)-4.0*pow(k,2)*kv*hv)*fact);
+	double T1213 = std::real(mu*pow(hv,2)*kv*(l-2.0*pow(k,2))*fact);
+	double iT1214 = std::real(k*mu*hv*kv*(l-2.0*hv*kv)*fact);
+	double T1224 = std::real(mu*hv*pow(kv,2)*(2.0*pow(k,2)-l)*fact);
+	double T1234 = std::real(hv*kv*(pow(k,2)-hv*kv)*fact);
 	
 	if (verbose==1) {
 		cout << "factor: " << fact << "\n"
@@ -143,32 +143,32 @@ std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp> compute_T(double w, double k, double v
 	return std::make_tuple(T1212,T1213,iT1214,T1224,T1234);
 }
 
-std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp> compute_G(double k, double dn, double w, double vp, double vs, double dens){
+std::tuple<double,double,double,double,double,double,double,double,double,double,double,double,double,double,double> compute_G(double k, double dn, double w, double vp, double vs, double dens){
 	double c = w/k;
 	auto kvert = compute_util(w, k, vp, vs, dn, 0);
-	dcomp SH = std::get<2>(kvert);
-	dcomp CH = std::get<3>(kvert);
-	dcomp SK = std::get<4>(kvert);
-	dcomp CK = std::get<5>(kvert);
-	dcomp gam = std::get<6>(kvert);
+	double SH = std::get<2>(kvert);
+	double CH = std::get<3>(kvert);
+	double SK = std::get<4>(kvert);
+	double CK = std::get<5>(kvert);
+	double gam = std::get<6>(kvert);
 	dcomp hvnorm = std::get<7>(kvert);
 	dcomp kvnorm = std::get<8>(kvert);
 	
-	dcomp G1212 = 2.0*gam * (1.0-gam) + (2.0*pow(gam,2)-2.0*gam+1.0) * CH*CK - (pow(1.0-gam,2) + pow(gam,2)*pow(hvnorm,2)*pow(kvnorm,2))*SH*SK;
-	dcomp G1213 = (1.0/(dens*w*c))*(CH*SK - SH*CK*pow(hvnorm,2));
-	dcomp iG1214 = (1.0/(dens*w*c))*((1.0 - 2.0*gam)*(1.0-CK*CH) + (1.0 - gam - gam*pow(hvnorm,2)*pow(kvnorm,2))*SH*SK);
-	dcomp G1224 = (1.0/(dens*w*c))*(pow(kvnorm,2)*CH*SK - SH*CK);
-	dcomp G1234 = (-1.0/(pow(dens,2)*pow(w,2)*pow(c,2)))*(2.0*(1.0 - CH*CK) + (1.0 + pow(kvnorm,2)*pow(hvnorm,2))*SK*SH);
-	dcomp G1312 = dens*w*c*(pow(gam,2)*pow(kvnorm,2)*CH*SK - pow(1.0-gam,2)*SH*CK);
-	dcomp G1313 = CH*CK;
-	dcomp iG1314 = 1.0*((1.0 - gam)*SH*CK + gam*pow(kvnorm,2)*CH*SK);
-	dcomp G1324 = (-1.0)*pow(kvnorm,2)*SH*SK;
-	dcomp iG1412 = 1.0*dens*w*c*((3.0*pow(gam,2) - 2.0*pow(gam,3) - gam)*(1.0 - CH*CK)+(pow(1.0 - gam,3) - pow(gam,3)*pow(hvnorm,2)*pow(kvnorm,2))*SH*SK);
-	dcomp iG1413 = (-1.0)*1.0*((1.0 - gam)*CH*SK + gam*pow(hvnorm,2)*SH*CK);
-	dcomp G1414 = 1.0 - 2.0*gam*(1.0 - gam)*(1.0 - CH*CK) + (pow(1.0 - gam,2) + pow(gam,2)*pow(kvnorm,2)*pow(hvnorm,2))*SH*SK;
-	dcomp G2412 = dens*w*c*(pow(1.0 - gam,2)*CH*SK - pow(gam,2)*SH*CK*pow(hvnorm,2));
-	dcomp G2413 = (-1.0)*pow(hvnorm,2)*SH*SK;
-	dcomp G3412 = (-1.0)*pow(dens,2)*pow(w,2)*pow(c,2)*(2.0*pow(gam,2)*pow(1.0 - gam,2)*(1.0 - CH*CK) + (pow(1.0 - gam,4)+pow(gam,4)*pow(hvnorm,2)*pow(kvnorm,2))*SH*SK);
+	double G1212 = std::real(2.0*gam * (1.0-gam) + (2.0*pow(gam,2)-2.0*gam+1.0) * CH*CK - (pow(1.0-gam,2) + pow(gam,2)*pow(hvnorm,2)*pow(kvnorm,2))*SH*SK);
+	double G1213 = std::real((1.0/(dens*w*c))*(CH*SK - SH*CK*pow(hvnorm,2)));
+	double iG1214 = std::real((1.0/(dens*w*c))*((1.0 - 2.0*gam)*(1.0-CK*CH) + (1.0 - gam - gam*pow(hvnorm,2)*pow(kvnorm,2))*SH*SK));
+	double G1224 = std::real((1.0/(dens*w*c))*(pow(kvnorm,2)*CH*SK - SH*CK));
+	double G1234 = std::real((-1.0/(pow(dens,2)*pow(w,2)*pow(c,2)))*(2.0*(1.0 - CH*CK) + (1.0 + pow(kvnorm,2)*pow(hvnorm,2))*SK*SH));
+	double G1312 = std::real(dens*w*c*(pow(gam,2)*pow(kvnorm,2)*CH*SK - pow(1.0-gam,2)*SH*CK));
+	double G1313 = std::real(CH*CK);
+	double iG1314 = std::real((1.0 - gam)*SH*CK + gam*pow(kvnorm,2)*CH*SK);
+	double G1324 = std::real((-1.0)*pow(kvnorm,2)*SH*SK);
+	double iG1412 = std::real(dens*w*c*((3.0*pow(gam,2) - 2.0*pow(gam,3) - gam)*(1.0 - CH*CK)+(pow(1.0 - gam,3) - pow(gam,3)*pow(hvnorm,2)*pow(kvnorm,2))*SH*SK));
+	double iG1413 = std::real((-1.0)*((1.0 - gam)*CH*SK + gam*pow(hvnorm,2)*SH*CK));
+	double G1414 = std::real(1.0 - 2.0*gam*(1.0 - gam)*(1.0 - CH*CK) + (pow(1.0 - gam,2) + pow(gam,2)*pow(kvnorm,2)*pow(hvnorm,2))*SH*SK);
+	double G2412 = std::real(dens*w*c*(pow(1.0 - gam,2)*CH*SK - pow(gam,2)*SH*CK*pow(hvnorm,2)));
+	double G2413 = std::real((-1.0)*pow(hvnorm,2)*SH*SK);
+	double G3412 = std::real((-1.0)*pow(dens,2)*pow(w,2)*pow(c,2)*(2.0*pow(gam,2)*pow(1.0 - gam,2)*(1.0 - CH*CK) + (pow(1.0 - gam,4)+pow(gam,4)*pow(hvnorm,2)*pow(kvnorm,2))*SH*SK));
 	
 	if (verbose==1){
 		cout << "G-Komponenten:\n"
@@ -182,54 +182,54 @@ std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dcomp,dco
 	return std::make_tuple(G1212,G1213,iG1214,G1224,G1234,G1312,G1313,iG1314,G1324,iG1412,iG1413,G1414,G2412,G2413,G3412);
 }
 
-std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp> compute_R(double w, double k, double vp, double vs, double dn, double dens, std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp> T){
-	dcomp T1212 = std::get<0>(T);
-	dcomp T1213 = std::get<1>(T);
-	dcomp iT1214 = std::get<2>(T);
-	dcomp T1224 = std::get<3>(T);
-	dcomp T1234 = std::get<4>(T);
+std::tuple<double,double,double,double,double> compute_R(double w, double k, double vp, double vs, double dn, double dens, std::tuple<double,double,double,double,double> T){
+	double T1212 = std::get<0>(T);
+	double T1213 = std::get<1>(T);
+	double iT1214 = std::get<2>(T);
+	double T1224 = std::get<3>(T);
+	double T1234 = std::get<4>(T);
 	auto G = compute_G(k,dn,w,vp,vs,dens);
-	dcomp G1212 = std::get<0>(G);
-	dcomp G1213 = std::get<1>(G);
-	dcomp iG1214 = std::get<2>(G);
-	dcomp G1224 = std::get<3>(G);
-	dcomp G1234 = std::get<4>(G);
-	dcomp G1312 = std::get<5>(G);
-	dcomp G1313 = std::get<6>(G);
-	dcomp iG1314 = std::get<7>(G);
-	dcomp G1324 = std::get<8>(G);
-	dcomp iG1412 = std::get<9>(G);
-	dcomp iG1413 = std::get<10>(G);
-	dcomp G1414 = std::get<11>(G);
-	dcomp G2412 = std::get<12>(G);
-	dcomp G2413 = std::get<13>(G);
-	dcomp G3412 = std::get<14>(G);
+	double G1212 = std::get<0>(G);
+	double G1213 = std::get<1>(G);
+	double iG1214 = std::get<2>(G);
+	double G1224 = std::get<3>(G);
+	double G1234 = std::get<4>(G);
+	double G1312 = std::get<5>(G);
+	double G1313 = std::get<6>(G);
+	double iG1314 = std::get<7>(G);
+	double G1324 = std::get<8>(G);
+	double iG1412 = std::get<9>(G);
+	double iG1413 = std::get<10>(G);
+	double G1414 = std::get<11>(G);
+	double G2412 = std::get<12>(G);
+	double G2413 = std::get<13>(G);
+	double G3412 = std::get<14>(G);
 	
-	dcomp R1212 = T1212*G1212 + T1213*G1312 - 2.0*iT1214*iG1412 + T1224*G2412 + T1234*G3412;
-	dcomp R1213 = T1212*G1213 + T1213*G1313 - 2.0*iT1214*iG1413 + T1224*G2413 + T1234*G2412;
-	dcomp iR1214 = T1212*iG1214 + T1213*iG1314 + iT1214*(2.0*G1414-1.0) + T1224*iG1413 + T1234*iG1412;
-	dcomp R1224 = T1212*G1224 + T1213*G1324 - 2.0*iT1214*iG1314 + T1224*G1313 + T1234*G1312;
-	dcomp R1234 = T1212*G1234 + T1213*G1224 - 2.0*iT1214*iG1214 + T1224*G1213 + T1234*G1212;
+	double R1212 = T1212*G1212 + T1213*G1312 - 2.0*iT1214*iG1412 + T1224*G2412 + T1234*G3412;
+	double R1213 = T1212*G1213 + T1213*G1313 - 2.0*iT1214*iG1413 + T1224*G2413 + T1234*G2412;
+	double iR1214 = T1212*iG1214 + T1213*iG1314 + iT1214*(2.0*G1414-1.0) + T1224*iG1413 + T1234*iG1412;
+	double R1224 = T1212*G1224 + T1213*G1324 - 2.0*iT1214*iG1314 + T1224*G1313 + T1234*G1312;
+	double R1234 = T1212*G1234 + T1213*G1224 - 2.0*iT1214*iG1214 + T1224*G1213 + T1234*G1212;
 	
-	double tmpmax, maxR = std::real(R1212);
+	double tmpmax, maxR = R1212;
 	if(maxR<0)
 		maxR = (-1.0)*maxR;
-	tmpmax = std::real(R1213);
+	tmpmax = R1213;
 	if (tmpmax<0)
 		tmpmax = (-1.0)*tmpmax;
 	if (tmpmax>maxR)
 		maxR = tmpmax;
-	tmpmax = std::imag(iR1214);
+	tmpmax = iR1214;
 	if (tmpmax<0)
 		tmpmax = (-1.0)*tmpmax;
 	if (tmpmax>maxR)
 		maxR = tmpmax;
-	tmpmax = std::real(R1224);
+	tmpmax = R1224;
 	if (tmpmax<0)
 		tmpmax = (-1.0)*tmpmax;
 	if (tmpmax>maxR)
 		maxR = tmpmax;
-	tmpmax = std::real(R1234);
+	tmpmax = R1234;
 	if (tmpmax<0)
 		tmpmax = (-1.0)*tmpmax;
 	if (tmpmax>maxR)
@@ -310,7 +310,7 @@ int main()
 			if (verbose==1)
 				cout << "Aktuelle Kreisfreq. & Wellenzahl: " << w[freq] << "\t" << k << "\n";
 			
-			std::tuple<dcomp,dcomp,dcomp,dcomp,dcomp> R;
+			std::tuple<double,double,double,double,double> R;
 			
 			for(int n=nlay-1;n>=0;n--){
 				if (verbose==1){
