@@ -67,9 +67,9 @@ double newton_vr(double vp, double vs){
 	return vr;
 }
 
-std::tuple<dcomp,dcomp,double,double,double,double,double,dcomp,dcomp,double> compute_util(double w, double k, double vp, double vs, double dn, bool botlay){
+std::tuple<dcomp,dcomp,double,double,double,double,double,dcomp,dcomp,double> compute_util(double w, double c, double vp, double vs, double dn, bool botlay){
 	dcomp hv, kv;
-	double SH, CH, SK, CK, mh, mk, c = w/k;
+	double SH, CH, SK, CK, mh, mk, k = w/c;
 	if (c < vp){
 		mh = sqrt(pow(w/c,2)-pow(w/vp,2));
 		hv = mh;
@@ -119,9 +119,9 @@ std::tuple<dcomp,dcomp,double,double,double,double,double,dcomp,dcomp,double> co
 	return std::make_tuple(hv, kv, SH, CH, SK, CK, gam, hvnorm, kvnorm, l);
 }
 
-std::tuple<double,double,double,double,double> compute_T(double w, double k, double vp, double vs, double mu){
-	double c = w/k;
-	auto util = compute_util(w, k, vp, vs, 99999, 1);
+std::tuple<double,double,double,double,double> compute_T(double w, double c, double vp, double vs, double mu){
+	double k = w/c;
+	auto util = compute_util(w, c, vp, vs, 99999, 1);
 	dcomp hv = std::get<0>(util);
 	dcomp kv = std::get<1>(util);
 	double l = std::get<9>(util);
@@ -145,9 +145,8 @@ std::tuple<double,double,double,double,double> compute_T(double w, double k, dou
 	return std::make_tuple(T1212,T1213,iT1214,T1224,T1234);
 }
 
-std::tuple<double,double,double,double,double,double,double,double,double,double,double,double,double,double,double> compute_G(double k, double dn, double w, double vp, double vs, double dens){
-	double c = w/k;
-	auto kvert = compute_util(w, k, vp, vs, dn, 0);
+std::tuple<double,double,double,double,double,double,double,double,double,double,double,double,double,double,double> compute_G(double c, double dn, double w, double vp, double vs, double dens){
+	auto kvert = compute_util(w, c, vp, vs, dn, 0);
 	double SH = std::get<2>(kvert);
 	double CH = std::get<3>(kvert);
 	double SK = std::get<4>(kvert);
@@ -184,13 +183,13 @@ std::tuple<double,double,double,double,double,double,double,double,double,double
 	return std::make_tuple(G1212,G1213,iG1214,G1224,G1234,G1312,G1313,iG1314,G1324,iG1412,iG1413,G1414,G2412,G2413,G3412);
 }
 
-std::tuple<double,double,double,double,double> compute_R(double w, double k, double vp, double vs, double dn, double dens, std::tuple<double,double,double,double,double> T){
+std::tuple<double,double,double,double,double> compute_R(double w, double c, double vp, double vs, double dn, double dens, std::tuple<double,double,double,double,double> T){
 	double T1212 = std::get<0>(T);
 	double T1213 = std::get<1>(T);
 	double iT1214 = std::get<2>(T);
 	double T1224 = std::get<3>(T);
 	double T1234 = std::get<4>(T);
-	auto G = compute_G(k,dn,w,vp,vs,dens);
+	auto G = compute_G(c,dn,w,vp,vs,dens);
 	double G1212 = std::get<0>(G);
 	double G1213 = std::get<1>(G);
 	double iG1214 = std::get<2>(G);
@@ -256,7 +255,7 @@ std::tuple<double,double,double,double,double> compute_R(double w, double k, dou
 	return std::make_tuple(R1212,R1213,iR1214,R1224,R1234);
 }
 
-double compute_R1212(double w, double k, std::vector<double> vp, std::vector<double> vs, double mu, std::vector<double> depth, std::vector<double> dens){
+double compute_R1212(double w, double c, std::vector<double> vp, std::vector<double> vs, double mu, std::vector<double> depth, std::vector<double> dens){
 	std::tuple<double,double,double,double,double> R;
 	for(int n=nlay-1;n>=0;n--){
 		if (verbose==1){
@@ -264,12 +263,12 @@ double compute_R1212(double w, double k, std::vector<double> vp, std::vector<dou
 			cout << "Geschwindigkeiten: " << vp[n] << "\t" << vs[n] << "\n";
 		}
 		if (n==nlay-1)
-			R = compute_T(w, k, vp[n], vs[n], mu);
+			R = compute_T(w, c, vp[n], vs[n], mu);
 		else {
 			double dn = depth[n+1]-depth[n];
 			if (verbose==1)
 				cout << "Schichtdicke: " << dn << "m\n";
-			R = compute_R(w, k, vp[n], vs[n], dn, dens[n], R);
+			R = compute_R(w, c, vp[n], vs[n], dn, dens[n], R);
 		}
 	}
 	return(std::get<0>(R));
@@ -325,13 +324,14 @@ int main()
 		
 		for(int kint=0; kint<nk; kint++){
 			double k=k_lim[0]-kint*(k_lim[0]-k_lim[1])/(nk-1);
+			double c = w[freq]/k;
 			
 			if (verbose==1)
-				cout << "Aktuelle Kreisfreq. & Wellenzahl: " << w[freq] << "\t" << k << "\n";
+				cout << "Aktuelle Kreisfreq. & Geschwindigkeit: " << w[freq] << "\t" << c << "\n";
 			
-			double R1212 = compute_R1212(w[freq], k, vp, vs, mu, depth, dens);
+			double R1212 = compute_R1212(w[freq], c, vp, vs, mu, depth, dens);
 			
-			resultfile << "\n" << w[freq]/(2*M_PI) << "\t" << w[freq]/k << "\t" << R1212;
+			resultfile << "\n" << w[freq]/(2*M_PI) << "\t" << c << "\t" << R1212;
 		}
 	}
 	
