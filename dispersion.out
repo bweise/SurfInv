@@ -1,6 +1,7 @@
 # Output of 1Dvs2vph:
 # 10000 wavenumbers at 9 Frequencies tested.
 # Frequency [1/s] 	 Phase velocity [m/s] 	 R1212 
+
 1	2626.44	-100000
 1	2626.56	-100000
 1	2626.68	-100000

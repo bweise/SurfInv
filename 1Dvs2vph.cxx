@@ -327,15 +327,10 @@ int main()
 					R = compute_R(w[freq], k, vp[n], vs[n], dn, dens[n], R);
 				}
 			}
-			if (freq==w.size()-1 & kk==nk-1){
-				resultfile << w[freq]/(2*M_PI) << "\t" << w[freq]/k << "\t" << std::real(std::get<0>(R));
-				resultfile.close();
-			}
-			else
-				resultfile << w[freq]/(2*M_PI) << "\t" << w[freq]/k << "\t" << std::real(std::get<0>(R)) << "\n";
+			resultfile << "\n" << w[freq]/(2*M_PI) << "\t" << w[freq]/k << "\t" << std::real(std::get<0>(R));
 		}
 	}
-	
+	resultfile.close();
 	return 0;
 }
 
