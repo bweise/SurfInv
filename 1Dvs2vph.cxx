@@ -5,7 +5,6 @@
  * Cercato (2007)
  */
 
-using namespace std;
 #include <iostream>
 #include <vector>
 #include <complex>
@@ -13,6 +12,10 @@ using namespace std;
 #include <tuple>
 #include <algorithm>
 #include <fstream>
+#include </home/bweise/bmw/netcdf/include/netcdf>
+using namespace std;
+using namespace netCDF;
+
 typedef complex<double> dcomp;
 const std::complex<double> i(0, 1.0);
 bool verbose = 0;
@@ -21,7 +24,7 @@ bool verbose = 0;
 std::vector<double> periods = {1,10,20,30,40,50,60,80,100};
 
 // Definition 1D Modell
-std::vector<double> depth = {0,5000,15000,30000,55000};	// Tiefe Schichtgrenzen [m]
+/*std::vector<double> depth = {0,5000,15000,30000,55000};	// Tiefe Schichtgrenzen [m]
 std::vector<double> vp = {5190,6060,6930,7790,8660};	// Vp für Schichten [m/s]
 std::vector<double> vs = {3000,3500,4000,4500,5000};	// Vs für Schichten [m/s]
 std::vector<double> dens = {2400,2625,2850,3075,3300}; // Dichten [kg/m3]*/
@@ -260,6 +263,32 @@ double compute_R1212(double w, double c, std::vector<double> vp, std::vector<dou
 }
 
 int main(){
+	
+	// Read model from nc file
+	static const int NX = 127; // Number of cells in nc file
+	static const int NY = 127;
+	static const int NZ = 31;
+	double depth[NZ];		// Define data variables
+	double MPX[NX];
+	double MPY[NY];
+	double dens[NX][NY][NZ];
+	//double vp[NX][NY][NZ];
+	//double vs[NX][NY][NZ];
+	NcFile densFile("simple_xy.nc", NcFile::read);
+	NcFile velFile("simple_xy.nc", NcFile::read);
+	NcVar data=densFile.getVar("Depth");
+	data.getVar(depth);
+	NcVar data=densFile.getVar("MeasPosX");
+	data.getVar(MPX);
+	NcVar data=densFile.getVar("MeasPosY");
+	data.getVar(MPY);
+	NcVar data=densFile.getVar("Density");
+	data.getVar(dens);
+	//NcVar data=velFile.getVar("Vs");
+	//data.getVar(vp);
+	//NcVar data=velFile.getVar("Vp");
+	//data.getVar(vs);
+	
 	int nlay = depth.size();
 
 	ofstream resultfile;
