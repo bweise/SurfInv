@@ -12,7 +12,8 @@
 #include <tuple>
 #include <algorithm>
 #include <fstream>
-#include </home/bweise/bmw/netcdf/include/netcdf>
+#include <netcdf>
+
 using namespace std;
 using namespace netCDF;
 
@@ -23,7 +24,6 @@ bool verbose = 0;
 // Perioden in sec
 std::vector<double> periods = {1,10,20,30,40,50,60,80,100};
 
-// Definition 1D Modell
 /*std::vector<double> depth = {0,5000,15000,30000,55000};	// Tiefe Schichtgrenzen [m]
 std::vector<double> vp = {5190,6060,6930,7790,8660};	// Vp für Schichten [m/s]
 std::vector<double> vs = {3000,3500,4000,4500,5000};	// Vs für Schichten [m/s]
@@ -268,30 +268,59 @@ int main(){
 	static const int NX = 127; // Number of cells in nc file
 	static const int NY = 127;
 	static const int NZ = 31;
-	double depth[NZ];		// Define data variables
-	double MPX[NX];
-	double MPY[NY];
-	double dens[NX][NY][NZ];
-	//double vp[NX][NY][NZ];
-	//double vs[NX][NY][NZ];
-	NcFile densFile("simple_xy.nc", NcFile::read);
-	NcFile velFile("simple_xy.nc", NcFile::read);
-	NcVar data=densFile.getVar("Depth");
-	data.getVar(depth);
-	NcVar data=densFile.getVar("MeasPosX");
-	data.getVar(MPX);
-	NcVar data=densFile.getVar("MeasPosY");
-	data.getVar(MPY);
-	NcVar data=densFile.getVar("Density");
-	data.getVar(dens);
-	//NcVar data=velFile.getVar("Vs");
-	//data.getVar(vp);
-	//NcVar data=velFile.getVar("Vp");
-	//data.getVar(vs);
+	double depth_arr[NZ];		// Define data variables
+	double north_arr[NX];
+	double east_arr[NY];
+	double dens_arr[NX][NY][NZ];
+	double vp_arr[NX][NY][NZ];
+	double vs_arr[NX][NY][NZ];
+	NcFile densFile("/home/bweise/bmw/WINTERC/dens_na.nc", NcFile::read);
+	/*NcFile vpFile("/home/bweise/bmw/WINTERC/vp_na.nc", NcFile::read);
+	NcFile vsFile("/home/bweise/bmw/WINTERC/vs_na.nc", NcFile::read);
+	NcVar depthIn=densFile.getVar("Depth");
+	depthIn.getVar(depth_arr);
+	NcVar northingIn=densFile.getVar("Northing");
+	northingIn.getVar(north_arr);
+	NcVar eastingIn=densFile.getVar("Easting");
+	eastingIn.getVar(east_arr);
+	NcVar densIn=densFile.getVar("Density");
+	densIn.getVar(dens_arr);
+	NcVar vsIn=vsFile.getVar("Vs");
+	vsIn.getVar(vs_arr);
+	NcVar vpIn=vpFile.getVar("Vp");
+	vpIn.getVar(vp_arr);
 	
+	std::vector<double> depth(depth_arr, depth_arr + sizeof depth_arr / sizeof depth_arr[0]);
+	depth.pop_back();
+	depth.insert(depth.begin(), 0);
 	int nlay = depth.size();
+	
+	double dens2[nlay];
+	double vs2[nlay];
+	double vp2[nlay];
 
-	ofstream resultfile;
+	for (int n=0;n<nlay;n++)
+		dens2[n] = dens_arr[0][0][n];
+	for (int n=0;n<nlay;n++)
+		vs2[n] = vs_arr[0][0][n];
+	for (int n=0;n<nlay;n++)
+		vp2[n] = vp_arr[0][0][n];
+	
+	std::vector<double> dens(dens2, dens2 + sizeof dens2 / sizeof dens2[0]);
+	std::vector<double> vs(vs2, vs2 + sizeof vs2 / sizeof vs2[0]);
+	std::vector<double> vp(vp2, vp2 + sizeof vp2 / sizeof vp2[0]);
+	
+	cout << "Northing:\t" << north_arr[0] << "\n"
+		<< "Easting:\t" << east_arr[0] << "\n";
+		
+	for (int n=0;n<nlay;n++){
+		cout << "Schicht " << n+1 << ":\n"
+			<< "Dichte:\t" << dens[n] << "\n"
+			<< "Vs:\t" << vs[n] << "\n"
+			<< "Vp:\t" << vp[n] << "\n";
+	}*/
+
+	/*ofstream resultfile;
 	resultfile.open ("dispersion.out");
 	resultfile << "# No. of Periods \t Period [s] \t Phase velocity 1 [m/s] \t Phase velocity 2 [m/s]";
 	
@@ -357,6 +386,6 @@ int main(){
 		resultfile << "\n" << freq+1 << "\t" << (2*M_PI)/w[freq] << "\t" << c0 << "\t" << c1;
 	}
 	
-	resultfile.close();
+	resultfile.close();*/
 	return 0;
 }
