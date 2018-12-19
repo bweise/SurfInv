@@ -16,6 +16,7 @@
 
 using namespace std;
 using namespace netCDF;
+using namespace netCDF::exceptions;
 
 typedef complex<double> dcomp;
 const std::complex<double> i(0, 1.0);
@@ -29,7 +30,7 @@ std::vector<double> vp = {5190,6060,6930,7790,8660};	// Vp für Schichten [m/s]
 std::vector<double> vs = {3000,3500,4000,4500,5000};	// Vs für Schichten [m/s]
 std::vector<double> dens = {2400,2625,2850,3075,3300}; // Dichten [kg/m3]*/
 
-double compute_fvr(double vp, double vs, double vr){
+/*double compute_fvr(double vp, double vs, double vr){
 	double fvr = 4.0-4.0*(pow(vr,2)/pow(vs,2))+pow(vr,4)/pow(vs,4)-4.0*sqrt(1-pow(vr,2)/pow(vp,2))*sqrt(1.0-pow(vr,2)/pow(vs,2));
 	return fvr;
 }
@@ -260,7 +261,7 @@ double compute_R1212(double w, double c, std::vector<double> vp, std::vector<dou
 		}
 	}
 	return(std::get<0>(R));
-}
+}*/
 
 int main(){
 	
@@ -268,57 +269,41 @@ int main(){
 	static const int NX = 127; // Number of cells in nc file
 	static const int NY = 127;
 	static const int NZ = 31;
-	double depth_arr[NZ];		// Define data variables
-	double north_arr[NX];
-	double east_arr[NY];
-	double dens_arr[NX][NY][NZ];
-	double vp_arr[NX][NY][NZ];
-	double vs_arr[NX][NY][NZ];
+	std::vector<double> depth(NZ);		// Define data variables
+	std::vector<double> north(NX);
+	std::vector<double> east(NY);
+	std::vector<double> dens_all(NX*NY*NZ);
+	std::vector<double> vp_all(NX*NY*NZ);
+	std::vector<double> vs_all(NX*NY*NZ);
 	NcFile densFile("/home/bweise/bmw/WINTERC/dens_na.nc", NcFile::read);
-	/*NcFile vpFile("/home/bweise/bmw/WINTERC/vp_na.nc", NcFile::read);
+	NcFile vpFile("/home/bweise/bmw/WINTERC/vp_na.nc", NcFile::read);
 	NcFile vsFile("/home/bweise/bmw/WINTERC/vs_na.nc", NcFile::read);
 	NcVar depthIn=densFile.getVar("Depth");
-	depthIn.getVar(depth_arr);
+	depthIn.getVar(depth.data());
 	NcVar northingIn=densFile.getVar("Northing");
-	northingIn.getVar(north_arr);
+	northingIn.getVar(north.data());
 	NcVar eastingIn=densFile.getVar("Easting");
-	eastingIn.getVar(east_arr);
+	eastingIn.getVar(east.data());
 	NcVar densIn=densFile.getVar("Density");
-	densIn.getVar(dens_arr);
+	densIn.getVar(dens_all.data());
 	NcVar vsIn=vsFile.getVar("Vs");
-	vsIn.getVar(vs_arr);
+	vsIn.getVar(vs_all.data());
 	NcVar vpIn=vpFile.getVar("Vp");
-	vpIn.getVar(vp_arr);
+	vpIn.getVar(vp_all.data());
 	
-	std::vector<double> depth(depth_arr, depth_arr + sizeof depth_arr / sizeof depth_arr[0]);
 	depth.pop_back();
 	depth.insert(depth.begin(), 0);
 	int nlay = depth.size();
 	
-	double dens2[nlay];
-	double vs2[nlay];
-	double vp2[nlay];
-
-	for (int n=0;n<nlay;n++)
-		dens2[n] = dens_arr[0][0][n];
-	for (int n=0;n<nlay;n++)
-		vs2[n] = vs_arr[0][0][n];
-	for (int n=0;n<nlay;n++)
-		vp2[n] = vp_arr[0][0][n];
-	
-	std::vector<double> dens(dens2, dens2 + sizeof dens2 / sizeof dens2[0]);
-	std::vector<double> vs(vs2, vs2 + sizeof vs2 / sizeof vs2[0]);
-	std::vector<double> vp(vp2, vp2 + sizeof vp2 / sizeof vp2[0]);
-	
-	cout << "Northing:\t" << north_arr[0] << "\n"
-		<< "Easting:\t" << east_arr[0] << "\n";
+	cout << "Northing:\t" << north[0] << "\n"
+		<< "Easting:\t" << east[0] << "\n";
 		
 	for (int n=0;n<nlay;n++){
-		cout << "Schicht " << n+1 << ":\n"
-			<< "Dichte:\t" << dens[n] << "\n"
-			<< "Vs:\t" << vs[n] << "\n"
-			<< "Vp:\t" << vp[n] << "\n";
-	}*/
+		cout << "Schicht " << n+1 << ":\t"
+			<< "Dichte: " << dens_all[n] << "\t"
+			<< "Vs: " << vs_all[n] << "\t"
+			<< "Vp: " << vp_all[n] << "\n";
+	}
 
 	/*ofstream resultfile;
 	resultfile.open ("dispersion.out");
