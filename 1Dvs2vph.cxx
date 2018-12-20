@@ -266,9 +266,9 @@ double compute_R1212(double w, double c, std::vector<double> vp, std::vector<dou
 int main(){
 	
 	// Read model from nc file
-	static const int NX = 127; // Number of cells in nc file
-	static const int NY = 127;
-	static const int NZ = 31;
+	static const int NX = 12; // Number of cells in nc file
+	static const int NY = 20;
+	static const int NZ = 201;
 	std::vector<double> depth(NZ);		// Define data variables
 	std::vector<double> north(NX);
 	std::vector<double> east(NY);
@@ -305,11 +305,12 @@ int main(){
 			std::vector<double> vs;
 			std::vector<double> vp;	
 			for (int n=0; n<nlay; n++){
-				dens.push_back(dens_all[estep*NY+nstep+n*NX*NY]);
-				vs.push_back(vs_all[estep*NY+nstep+n*NX*NY]*1000);
-				vp.push_back(vp_all[estep*NY+nstep+n*NX*NY]*1000);
+				dens.push_back(dens_all[estep*NX+nstep+n*NX*NY]);
+				vs.push_back(vs_all[estep*NX+nstep+n*NX*NY]*1000);
+				vp.push_back(vp_all[estep*NX+nstep+n*NX*NY]*1000);
 				//cout << estep*NY+nstep+n*NX*NY << "\n";
 			}
+			//cout << dens.size() << "\n";
 			
 			if (vs[0]==0)
 				continue;
@@ -323,6 +324,7 @@ int main(){
 				if(verbose==1){
 					cout << "cmin: " << c_lim[0] << "\t cmax: " << c_lim[1] << "\n";
 					cout << "Anzahl Schichten: " << nlay << "\n";
+					cout << "Easting: " << east[estep] << "\t Northing: " << north[nstep] << "\n";
 	
 					for(int n=0; n<nlay-1; n++)
 						cout << "Schicht " << n+1 << " von " << depth[n] << " bis "
@@ -368,8 +370,7 @@ int main(){
 							cout << "Aktuelle Kreisfreq. & Geschwindigkeit: " << w[freq] << "\t" << c1 << "\n";
 			
 						R1212 = compute_R1212(w[freq], c1, vp, vs, mu, depth, dens, nlay);
-						pol1 = signbit(R1212);
-			
+						pol1 = signbit(R1212);		
 					}
 					resultfile << "\n" << east[estep] << "\t" << north[nstep] << "\t" << (2*M_PI)/w[freq] << "\t" << c0 << "\t" << c1;
 				}
