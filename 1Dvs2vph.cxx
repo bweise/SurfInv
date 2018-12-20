@@ -23,14 +23,14 @@ const std::complex<double> i(0, 1.0);
 bool verbose = 0;
 
 // Perioden in sec
-std::vector<double> periods = {1,10,20,30,40,50,60,80,100};
+std::vector<double> periods = {20};
 
 /*std::vector<double> depth = {0,5000,15000,30000,55000};	// Tiefe Schichtgrenzen [m]
 std::vector<double> vp = {5190,6060,6930,7790,8660};	// Vp für Schichten [m/s]
 std::vector<double> vs = {3000,3500,4000,4500,5000};	// Vs für Schichten [m/s]
 std::vector<double> dens = {2400,2625,2850,3075,3300}; // Dichten [kg/m3]*/
 
-/*double compute_fvr(double vp, double vs, double vr){
+double compute_fvr(double vp, double vs, double vr){
 	double fvr = 4.0-4.0*(pow(vr,2)/pow(vs,2))+pow(vr,4)/pow(vs,4)-4.0*sqrt(1-pow(vr,2)/pow(vp,2))*sqrt(1.0-pow(vr,2)/pow(vs,2));
 	return fvr;
 }
@@ -261,7 +261,7 @@ double compute_R1212(double w, double c, std::vector<double> vp, std::vector<dou
 		}
 	}
 	return(std::get<0>(R));
-}*/
+}
 
 int main(){
 	
@@ -295,82 +295,87 @@ int main(){
 	depth.insert(depth.begin(), 0);
 	int nlay = depth.size();
 	
-	cout << "Northing:\t" << north[0] << "\n"
-		<< "Easting:\t" << east[0] << "\n";
-		
-	for (int n=0;n<nlay;n++){
-		cout << "Schicht " << n+1 << ":\t"
-			<< "Dichte: " << dens_all[n] << "\t"
-			<< "Vs: " << vs_all[n] << "\t"
-			<< "Vp: " << vp_all[n] << "\n";
-	}
-
-	/*ofstream resultfile;
+	ofstream resultfile;
 	resultfile.open ("dispersion.out");
-	resultfile << "# No. of Periods \t Period [s] \t Phase velocity 1 [m/s] \t Phase velocity 2 [m/s]";
+	resultfile << "# Easting [m] \t Northing [m] \t Period [s] \t Phase velocity 1 [m/s] \t Phase velocity 2 [m/s]";
 	
-	std::vector<double> c_lim = {0,0};
-	c_lim[0] = newton_vr(vp[0], vs[0])/1.05;
-	c_lim[1] = newton_vr(vp[nlay-1], vs[nlay-1])*1.05;
-
-	auto vsmin = *std::min_element(vs.begin(),vs.end());
-	double stepratio = (vsmin - c_lim[0])/(2*vsmin);
-	
-	
-	if(verbose==1){
-		cout << "cmin: " << c_lim[0] << "\t cmax: " << c_lim[1] << "\n";
-		cout << "Anzahl Schichten: " << nlay << "\n";
-	
-		for(int n=0; n<nlay-1; n++)
-			cout << "Schicht " << n+1 << " von " << depth[n] << " bis "
-				<< depth[n+1] << " m mit vs = " << vs[n] << " m/s, vp = "
-				<< vp[n] << " m/s und " << dens[n] << " kg/m3 Dichte.\n";
-		cout << "Letzte Schicht ab " << depth[nlay-1] << " m: vs = "
-			<< vs[nlay-1] << " m/s, vp = " << vp[nlay-1]
-			<< " m/s, Dichte = " << dens[nlay-1] << " kg/m3.\n";
-		
-		cout << "Kreisfrequenzen:\t";
-	}
-	
-	std::vector<double> w;
-	for(int n=0; n<periods.size(); n++){
-		w.push_back(2*M_PI/periods[n]);
-		if (verbose==1)
-			cout << w[n] << " rad/s\n";
-	}
-	
-	double mu = pow(vs[nlay-1],2)*dens[nlay-1]; // Shear modulus unterste Schicht
-	if (verbose==1)
-		cout << "Schermodul unterste Schicht: " << mu << "\n"
-			<< "Polarisation von R1212 für geringe Geschwindigkeit: \n\n";
-		
-	double R1212 = compute_R1212(2*M_PI/200, c_lim[0], vp, vs, mu, depth, dens, nlay);
-	bool pol0 = signbit(R1212);	
-
-	for(int freq=0; freq<w.size(); freq++){
-		int citer = 0;
-		double c0, c1;
-		bool pol1 = pol0;
-		
-		while (pol1==pol0){
-			citer = citer + 1;
-			if (citer==1)
-				c1 = c_lim[0];
-			else{
-				c0 = c1;
-				c1 = c0 + c0*stepratio;
+	for (int estep = 0; estep<NY; estep++){
+		for (int nstep = 0; nstep<NX; nstep++){
+			std::vector<double> dens;
+			std::vector<double> vs;
+			std::vector<double> vp;	
+			for (int n=0; n<nlay; n++){
+				dens.push_back(dens_all[estep*NY+nstep+n*NX*NY]);
+				vs.push_back(vs_all[estep*NY+nstep+n*NX*NY]*1000);
+				vp.push_back(vp_all[estep*NY+nstep+n*NX*NY]*1000);
+				//cout << estep*NY+nstep+n*NX*NY << "\n";
 			}
 			
-			if (verbose==1)
-				cout << "Aktuelle Kreisfreq. & Geschwindigkeit: " << w[freq] << "\t" << c1 << "\n";
-			
-			R1212 = compute_R1212(w[freq], c1, vp, vs, mu, depth, dens, nlay);
-			pol1 = signbit(R1212);
-			
-		}
-		resultfile << "\n" << freq+1 << "\t" << (2*M_PI)/w[freq] << "\t" << c0 << "\t" << c1;
-	}
+			if (vs[0]==0)
+				continue;
+			else{
+				std::vector<double> c_lim = {0,0};
+				c_lim[0] = newton_vr(vp[0], vs[0])/1.05;
+				c_lim[1] = newton_vr(vp[nlay-1], vs[nlay-1])*1.05;
+				auto vsmin = *std::min_element(vs.begin(),vs.end());
+				double stepratio = (vsmin - c_lim[0])/(2*vsmin);	
 	
-	resultfile.close();*/
+				if(verbose==1){
+					cout << "cmin: " << c_lim[0] << "\t cmax: " << c_lim[1] << "\n";
+					cout << "Anzahl Schichten: " << nlay << "\n";
+	
+					for(int n=0; n<nlay-1; n++)
+						cout << "Schicht " << n+1 << " von " << depth[n] << " bis "
+							<< depth[n+1] << " m mit vs = " << vs[n] << " m/s, vp = "
+							<< vp[n] << " m/s und " << dens[n] << " kg/m3 Dichte.\n";
+					cout << "Letzte Schicht ab " << depth[nlay-1] << " m: vs = "
+						<< vs[nlay-1] << " m/s, vp = " << vp[nlay-1]
+						<< " m/s, Dichte = " << dens[nlay-1] << " kg/m3.\n";
+		
+					cout << "Kreisfrequenzen:\t";
+				}
+	
+				std::vector<double> w;
+				for(int n=0; n<periods.size(); n++){
+					w.push_back(2*M_PI/periods[n]);
+					if (verbose==1)
+						cout << w[n] << " rad/s\n";
+				}
+	
+				double mu = pow(vs[nlay-1],2)*dens[nlay-1]; // Shear modulus unterste Schicht
+				if (verbose==1)
+					cout << "Schermodul unterste Schicht: " << mu << "\n"
+						<< "Polarisation von R1212 für geringe Geschwindigkeit: \n\n";
+		
+				double R1212 = compute_R1212(2*M_PI/200, c_lim[0], vp, vs, mu, depth, dens, nlay);
+				bool pol0 = signbit(R1212);	
+
+				for(int freq=0; freq<w.size(); freq++){
+					int citer = 0;
+					double c0, c1;
+					bool pol1 = pol0;
+		
+					while (pol0==pol1){
+						citer = citer + 1;
+						if (citer==1)
+							c1 = c_lim[0];
+						else{
+							c0 = c1;
+							c1 = c0 + 1;//c0*stepratio;
+						}
+			
+						if (verbose==1)
+							cout << "Aktuelle Kreisfreq. & Geschwindigkeit: " << w[freq] << "\t" << c1 << "\n";
+			
+						R1212 = compute_R1212(w[freq], c1, vp, vs, mu, depth, dens, nlay);
+						pol1 = signbit(R1212);
+			
+					}
+					resultfile << "\n" << east[estep] << "\t" << north[nstep] << "\t" << (2*M_PI)/w[freq] << "\t" << c0 << "\t" << c1;
+				}
+			}
+		}
+	}	
+	resultfile.close();
 	return 0;
 }
