@@ -370,6 +370,8 @@ int main(){
 							cout << "Aktuelle Kreisfreq. & Geschwindigkeit: " << w[freq] << "\t" << c1 << "\n";
 			
 						R1212 = compute_R1212(w[freq], c1, vp, vs, mu, depth, dens, nlay);
+						auto mylambda = [=] (double value){compute_R1212(w[freq],value,vp,vs,mu,depth,dens,nlay);};
+						mylambda(1.0);
 						pol1 = signbit(R1212);		
 					}
 					resultfile << "\n" << east[estep] << "\t" << north[nstep] << "\t" << (2*M_PI)/w[freq] << "\t" << c0 << "\t" << c1;

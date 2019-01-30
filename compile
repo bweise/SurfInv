@@ -1,0 +1,1 @@
+g++ 1Dvs2vph.cxx -o 1D -I/home/bweise/bmw/netcdf/include/ -L/home/bweise/bmw/netcdf/lib -lnetcdf_c++4 -Wl,-rpath -Wl,/home/bweise/bmw/netcdf/lib
