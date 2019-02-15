@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <fstream>
 #include <netcdf>
+#include <boost/math/tools/roots.hpp>
 
 using namespace std;
 using namespace netCDF;
@@ -20,15 +21,12 @@ using namespace netCDF::exceptions;
 
 typedef complex<double> dcomp;
 const std::complex<double> i(0, 1.0);
+
 bool verbose = 0;
+double tolerance = 0.0001;
 
 // Perioden in sec
 std::vector<double> periods = {20};
-
-/*std::vector<double> depth = {0,5000,15000,30000,55000};	// Tiefe Schichtgrenzen [m]
-std::vector<double> vp = {5190,6060,6930,7790,8660};	// Vp für Schichten [m/s]
-std::vector<double> vs = {3000,3500,4000,4500,5000};	// Vs für Schichten [m/s]
-std::vector<double> dens = {2400,2625,2850,3075,3300}; // Dichten [kg/m3]*/
 
 double compute_fvr(double vp, double vs, double vr){
 	double fvr = 4.0-4.0*(pow(vr,2)/pow(vs,2))+pow(vr,4)/pow(vs,4)-4.0*sqrt(1-pow(vr,2)/pow(vp,2))*sqrt(1.0-pow(vr,2)/pow(vs,2));
@@ -44,7 +42,7 @@ double newton_vr(double vp, double vs){
 	double vrlast = vs-1;
 	double vr;
 	double diff=99999.0;
-	while(diff>0.0001){
+	while(diff>tolerance){
 		double fvr = compute_fvr(vp, vs, vrlast);
 		double dfvr = compute_dfvr(vp, vs, vrlast);
 		vr = vrlast - fvr/dfvr;
@@ -263,21 +261,51 @@ double compute_R1212(double w, double c, std::vector<double> vp, std::vector<dou
 	return(std::get<0>(R));
 }
 
+class R1212_root{
+	public:
+		R1212_root(double w_, std::vector<double> vp_, std::vector<double> vs_, double mu_, std::vector<double> depth_, std::vector<double> dens_, int nlay_):w(w_),vp(vp_),vs(vs_),mu(mu_),depth(depth_),dens(dens_),nlay(nlay_) {};
+		double operator()(const double c){
+			return compute_R1212(w, c, vp, vs, mu, depth, dens, nlay);
+		}
+	private:
+		double w;
+		std::vector<double> vp;
+		std::vector<double> vs;
+		double mu;
+		std::vector<double> depth;
+		std::vector<double> dens;
+		int nlay;
+};
+
+struct TerminationCondition  {
+  bool operator() (double min, double max)  {
+    return abs(min - max) < tolerance;
+  }
+};
+
 int main(){
 	
+	NcFile densFile("/home/bweise/bmw/WINTERC/dens_na.nc", NcFile::read);
+	NcFile vpFile("/home/bweise/bmw/WINTERC/vp_na.nc", NcFile::read);
+	NcFile vsFile("/home/bweise/bmw/WINTERC/vs_na.nc", NcFile::read);
+	
+	NcDim nxIn=densFile.getDim("Northing");
+	NcDim nyIn=densFile.getDim("Easting");
+	NcDim nzIn=densFile.getDim("Depth");
+	int NX = nxIn.getSize();
+	int NY = nyIn.getSize();
+	int NZ = nzIn.getSize();
+	
 	// Read model from nc file
-	static const int NX = 12; // Number of cells in nc file
-	static const int NY = 20;
-	static const int NZ = 201;
 	std::vector<double> depth(NZ);		// Define data variables
 	std::vector<double> north(NX);
 	std::vector<double> east(NY);
 	std::vector<double> dens_all(NX*NY*NZ);
 	std::vector<double> vp_all(NX*NY*NZ);
 	std::vector<double> vs_all(NX*NY*NZ);
-	NcFile densFile("/home/bweise/bmw/WINTERC/dens_na.nc", NcFile::read);
-	NcFile vpFile("/home/bweise/bmw/WINTERC/vp_na.nc", NcFile::read);
-	NcFile vsFile("/home/bweise/bmw/WINTERC/vs_na.nc", NcFile::read);
+	
+	//cout << nxneu << "\t" << nyneu << "\t" << nzneu << "\n";
+	
 	NcVar depthIn=densFile.getVar("Depth");
 	depthIn.getVar(depth.data());
 	NcVar northingIn=densFile.getVar("Northing");
@@ -363,18 +391,22 @@ int main(){
 							c1 = c_lim[0];
 						else{
 							c0 = c1;
-							c1 = c0 + 1;//c0*stepratio;
+							c1 = c0 + c0*stepratio;//1;//c0*stepratio;
 						}
 			
 						if (verbose==1)
 							cout << "Aktuelle Kreisfreq. & Geschwindigkeit: " << w[freq] << "\t" << c1 << "\n";
 			
 						R1212 = compute_R1212(w[freq], c1, vp, vs, mu, depth, dens, nlay);
-						auto mylambda = [=] (double value){compute_R1212(w[freq],value,vp,vs,mu,depth,dens,nlay);};
-						mylambda(1.0);
+						//auto mylambda = [=] (double value){compute_R1212(w[freq],value,vp,vs,mu,depth,dens,nlay);};
+						//mylambda(1.0);
 						pol1 = signbit(R1212);		
 					}
-					resultfile << "\n" << east[estep] << "\t" << north[nstep] << "\t" << (2*M_PI)/w[freq] << "\t" << c0 << "\t" << c1;
+					R1212_root root(w[freq], vp, vs, mu, depth, dens, nlay);
+					std::pair<double, double> brackets;
+					boost::uintmax_t max_iter=500;;
+					brackets = boost::math::tools::toms748_solve(root, c0, c1, TerminationCondition(), max_iter);
+					resultfile << "\n" << east[estep] << "\t" << north[nstep] << "\t" << (2*M_PI)/w[freq] << "\t" << brackets.first << "\t" << brackets.second;
 				}
 			}
 		}
