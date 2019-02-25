@@ -22,27 +22,32 @@ using namespace netCDF::exceptions;
 typedef complex<double> dcomp;
 const std::complex<double> i(0, 1.0);
 
-bool verbose = 0;
-double tolerance = 0.0001;
+bool verbose = 0; // set to 1 for more output
+double tolerance = 0.0001; // Precision for phase velocity [m/s]
 
 // Perioden in sec
 std::vector<double> periods = {20};
 
+// function of root of rayleigh velocity
 double compute_fvr(double vp, double vs, double vr){
 	double fvr = 4.0-4.0*(pow(vr,2)/pow(vs,2))+pow(vr,4)/pow(vs,4)-4.0*sqrt(1-pow(vr,2)/pow(vp,2))*sqrt(1.0-pow(vr,2)/pow(vs,2));
 	return fvr;
 }
 
+// derivative of rayleigh velocity function
 double compute_dfvr(double vp, double vs, double vr){
 	double dfvr = -8.0*vr/pow(vs,2)+4.0*pow(vr,3)/pow(vs,4)+(4.0*vr*(pow(vp,2)+pow(vs,2)-2.0*pow(vr,2)))/(vp*vs*sqrt((vp-vr)*(vp+vr))*sqrt((vs-vr)*(vs+vr)));
 	return dfvr;
 }
 
+// computation of Rayleigh velocity of homogenous half space using Newton Raphson method
 double newton_vr(double vp, double vs){
+	// variables to store rayleigh velocity
 	double vrlast = vs-1;
 	double vr;
 	double diff=99999.0;
-	while(diff>tolerance){
+	// calculate Rayleigh velocity for homogenous half space
+	while(diff>tolerance){ 
 		double fvr = compute_fvr(vp, vs, vrlast);
 		double dfvr = compute_dfvr(vp, vs, vrlast);
 		vr = vrlast - fvr/dfvr;
@@ -55,6 +60,7 @@ double newton_vr(double vp, double vs){
 }
 
 std::tuple<dcomp,dcomp,double,double,double,double,double,dcomp,dcomp,double> compute_util(double w, double c, double vp, double vs, double dn, bool botlay){
+	// computes some constants for each layer (vertical wave numbers and some derived properties)
 	dcomp hv, kv;
 	double SH, CH, SK, CK, mh, mk, k = w/c;
 	if (c < vp){
@@ -107,6 +113,7 @@ std::tuple<dcomp,dcomp,double,double,double,double,double,dcomp,dcomp,double> co
 }
 
 std::tuple<double,double,double,double,double> compute_T(double w, double c, double vp, double vs, double mu){
+	// computes layer matrix for bottom layer (an i denotes an imaginary subdeterminant e.g. iT1214)
 	double k = w/c;
 	auto util = compute_util(w, c, vp, vs, 99999, 1);
 	dcomp hv = std::get<0>(util);
@@ -133,6 +140,7 @@ std::tuple<double,double,double,double,double> compute_T(double w, double c, dou
 }
 
 std::tuple<double,double,double,double,double,double,double,double,double,double,double,double,double,double,double> compute_G(double c, double dn, double w, double vp, double vs, double dens){
+	// computes subdeterminants of G matrix (an i denotes an imaginary subdeterminant e.g. iG1214)
 	auto kvert = compute_util(w, c, vp, vs, dn, 0);
 	double SH = std::get<2>(kvert);
 	double CH = std::get<3>(kvert);
@@ -171,6 +179,7 @@ std::tuple<double,double,double,double,double,double,double,double,double,double
 }
 
 std::tuple<double,double,double,double,double> compute_R(double w, double c, double vp, double vs, double dn, double dens, std::tuple<double,double,double,double,double> T){
+	// Recursive layer stacking from bottom to top layer (an i denotes an imaginary subdeterminant e.g. iR1214)
 	double T1212 = std::get<0>(T);
 	double T1213 = std::get<1>(T);
 	double iT1214 = std::get<2>(T);
@@ -199,6 +208,7 @@ std::tuple<double,double,double,double,double> compute_R(double w, double c, dou
 	double R1224 = T1212*G1224 + T1213*G1324 - 2.0*iT1214*iG1314 + T1224*G1313 + T1234*G1312;
 	double R1234 = T1212*G1234 + T1213*G1224 - 2.0*iT1214*iG1214 + T1224*G1213 + T1234*G1212;
 	
+	// Normalize R matrix components to +-100000
 	double tmpmax, maxR = R1212;
 	if(maxR<0)
 		maxR = (-1.0)*maxR;
@@ -243,6 +253,7 @@ std::tuple<double,double,double,double,double> compute_R(double w, double c, dou
 }
 
 double compute_R1212(double w, double c, std::vector<double> vp, std::vector<double> vs, double mu, std::vector<double> depth, std::vector<double> dens, int nlay){
+	// Recursive layer stacking from bottom to top to get R1212
 	std::tuple<double,double,double,double,double> R;
 	for(int n=nlay-1;n>=0;n--){
 		if (verbose==1){
@@ -262,6 +273,7 @@ double compute_R1212(double w, double c, std::vector<double> vp, std::vector<dou
 }
 
 class R1212_root{
+	// Root finding functor for R1212. Keeps all other varibles constants and only changes c (phase velocity) to finds roots. Uses the TOMS algorithm from the boost libraries
 	public:
 		R1212_root(double w_, std::vector<double> vp_, std::vector<double> vs_, double mu_, std::vector<double> depth_, std::vector<double> dens_, int nlay_):w(w_),vp(vp_),vs(vs_),mu(mu_),depth(depth_),dens(dens_),nlay(nlay_) {};
 		double operator()(const double c){
@@ -277,18 +289,21 @@ class R1212_root{
 		int nlay;
 };
 
-struct TerminationCondition  {
-  bool operator() (double min, double max)  {
+struct TerminationCondition{
+	// checks whether root bracketing has sufficiently converged
+	bool operator() (double min, double max){
     return abs(min - max) < tolerance;
-  }
+	}
 };
 
 int main(){
 	
+	// Read density, vs, vp from nc file
 	NcFile densFile("/home/bweise/bmw/WINTERC/dens_na.nc", NcFile::read);
 	NcFile vpFile("/home/bweise/bmw/WINTERC/vp_na.nc", NcFile::read);
 	NcFile vsFile("/home/bweise/bmw/WINTERC/vs_na.nc", NcFile::read);
 	
+	// Get dimensions of model
 	NcDim nxIn=densFile.getDim("Northing");
 	NcDim nyIn=densFile.getDim("Easting");
 	NcDim nzIn=densFile.getDim("Depth");
@@ -296,16 +311,15 @@ int main(){
 	int NY = nyIn.getSize();
 	int NZ = nzIn.getSize();
 	
-	// Read model from nc file
-	std::vector<double> depth(NZ);		// Define data variables
+	// Define data variables
+	std::vector<double> depth(NZ);
 	std::vector<double> north(NX);
 	std::vector<double> east(NY);
 	std::vector<double> dens_all(NX*NY*NZ);
 	std::vector<double> vp_all(NX*NY*NZ);
 	std::vector<double> vs_all(NX*NY*NZ);
 	
-	//cout << nxneu << "\t" << nyneu << "\t" << nzneu << "\n";
-	
+	// Read model from nc file
 	NcVar depthIn=densFile.getVar("Depth");
 	depthIn.getVar(depth.data());
 	NcVar northingIn=densFile.getVar("Northing");
@@ -319,13 +333,16 @@ int main(){
 	NcVar vpIn=vpFile.getVar("Vp");
 	vpIn.getVar(vp_all.data());
 	
+	// Generate additional "0" to start vector of depths
 	depth.pop_back();
 	depth.insert(depth.begin(), 0);
-	int nlay = depth.size();
+	int nlay = depth.size();	// number of layers
 	
+	// Open output file, write header line
 	ofstream resultfile;
 	resultfile.open ("dispersion.out");
-	resultfile << "# Easting [m] \t Northing [m] \t Period [s] \t Phase velocity 1 [m/s] \t Phase velocity 2 [m/s]";
+	resultfile << "# Easting [m] \t Northing [m] \t Period [s] \t Phase velocity [m/s] \t Differenz [m/s] \t Anzahl Iterationen";
+	
 	
 	for (int estep = 0; estep<NY; estep++){
 		for (int nstep = 0; nstep<NX; nstep++){
@@ -333,20 +350,22 @@ int main(){
 			std::vector<double> vs;
 			std::vector<double> vp;	
 			for (int n=0; n<nlay; n++){
+				// sort velocities, densities into 1D models 
 				dens.push_back(dens_all[estep*NX+nstep+n*NX*NY]);
 				vs.push_back(vs_all[estep*NX+nstep+n*NX*NY]*1000);
 				vp.push_back(vp_all[estep*NX+nstep+n*NX*NY]*1000);
-				//cout << estep*NY+nstep+n*NX*NY << "\n";
 			}
-			//cout << dens.size() << "\n";
 			
 			if (vs[0]==0)
+				// This still needs some work. Computation of dispersion curves does not work if top layer has vs=0
 				continue;
 			else{
+				// Calculation of velocity limits 
 				std::vector<double> c_lim = {0,0};
 				c_lim[0] = newton_vr(vp[0], vs[0])/1.05;
 				c_lim[1] = newton_vr(vp[nlay-1], vs[nlay-1])*1.05;
 				auto vsmin = *std::min_element(vs.begin(),vs.end());
+				// step ratio for root bracketing
 				double stepratio = (vsmin - c_lim[0])/(2*vsmin);	
 	
 				if(verbose==1){
@@ -364,53 +383,63 @@ int main(){
 		
 					cout << "Kreisfrequenzen:\t";
 				}
-	
+				
+				// Conversion of periods to frequencies
 				std::vector<double> w;
 				for(int n=0; n<periods.size(); n++){
 					w.push_back(2*M_PI/periods[n]);
 					if (verbose==1)
 						cout << w[n] << " rad/s\n";
 				}
-	
-				double mu = pow(vs[nlay-1],2)*dens[nlay-1]; // Shear modulus unterste Schicht
+				
+				// Shear modulus bottom layer
+				double mu = pow(vs[nlay-1],2)*dens[nlay-1];
 				if (verbose==1)
 					cout << "Schermodul unterste Schicht: " << mu << "\n"
 						<< "Polarisation von R1212 für geringe Geschwindigkeit: \n\n";
-		
+				
+				// Compute initial R1212 polarization for very low frequency		
 				double R1212 = compute_R1212(2*M_PI/200, c_lim[0], vp, vs, mu, depth, dens, nlay);
-				bool pol0 = signbit(R1212);	
-
+				bool pol0 = signbit(R1212);
+				
+				// Loop over all periods/frequencies
 				for(int freq=0; freq<w.size(); freq++){
-					int citer = 0;
-					double c0, c1;
-					bool pol1 = pol0;
-		
+					int citer = 0; // check for first iteration
+					double c0, c1;	// stores brackets
+					bool pol1 = pol0;	// initial polarization of R1212
+					
+					// Loop to find root brackets, breaks when sign of R1212 changes
 					while (pol0==pol1){
-						citer = citer + 1;
-						if (citer==1)
-							c1 = c_lim[0];
+						if (citer==0) // check for 1st iteration
+							c1 = c_lim[0];// set upper bracket to lower limit for c
+							citer = citer + 1;
 						else{
-							c0 = c1;
-							c1 = c0 + c0*stepratio;//1;//c0*stepratio;
+							c0 = c1;	// set lower bracket to value of last iteration's upper bracket
+							c1 = c0 + c0*stepratio;	// increase upper bracket by step ratio
 						}
 			
 						if (verbose==1)
 							cout << "Aktuelle Kreisfreq. & Geschwindigkeit: " << w[freq] << "\t" << c1 << "\n";
-			
+						
+						// Check polarization of R1212 for the upper bracket	
 						R1212 = compute_R1212(w[freq], c1, vp, vs, mu, depth, dens, nlay);
-						//auto mylambda = [=] (double value){compute_R1212(w[freq],value,vp,vs,mu,depth,dens,nlay);};
-						//mylambda(1.0);
 						pol1 = signbit(R1212);		
 					}
+					
+					// If a sign change is found, brackets c1 & c2 are passed to an instance of R1212 root (-> Boost TOMS root finding algorithm)
 					R1212_root root(w[freq], vp, vs, mu, depth, dens, nlay);
 					std::pair<double, double> brackets;
-					boost::uintmax_t max_iter=500;;
+					boost::uintmax_t max_iter=500;	// Maximum number of iterations (500 is probably way to much...)
 					brackets = boost::math::tools::toms748_solve(root, c0, c1, TerminationCondition(), max_iter);
-					resultfile << "\n" << east[estep] << "\t" << north[nstep] << "\t" << (2*M_PI)/w[freq] << "\t" << brackets.first << "\t" << brackets.second;
+					
+					// Write output to file
+					resultfile << "\n" << east[estep] << "\t" << north[nstep] << "\t" << (2*M_PI)/w[freq] << "\t" << brackets.second << "\t" << brackets.second-brackets.first << "\t" << max_iter;
 				}
 			}
 		}
-	}	
+	}
+	
+	// close file and end program	
 	resultfile.close();
 	return 0;
 }
