@@ -26,7 +26,7 @@ bool verbose = 0; // set to 1 for more output
 double tolerance = 0.0001; // Precision for phase velocity [m/s]
 
 // Perioden in sec
-std::vector<double> periods = {20};
+std::vector<double> periods = {25,20};
 
 // function of root of rayleigh velocity
 double compute_fvr(double vp, double vs, double vr){
@@ -343,28 +343,37 @@ int main(){
 	resultfile.open ("dispersion.out");
 	resultfile << "# Easting [m] \t Northing [m] \t Period [s] \t Phase velocity [m/s] \t Differenz [m/s] \t Anzahl Iterationen";
 	
+	// Sort vector of periods
+	std::sort(periods.begin(), periods.end());
 	
 	for (int estep = 0; estep<NY; estep++){
 		for (int nstep = 0; nstep<NX; nstep++){
 			std::vector<double> dens;
 			std::vector<double> vs;
 			std::vector<double> vp;	
+			bool lvz=0;
 			for (int n=0; n<nlay; n++){
 				// sort velocities, densities into 1D models 
 				dens.push_back(dens_all[estep*NX+nstep+n*NX*NY]);
 				vs.push_back(vs_all[estep*NX+nstep+n*NX*NY]*1000);
+				//cout << vs[n] << "\n";
+				// check if there's a low velocity zone
+				if (n>0 & vs[n]<vs[n-1])
+					lvz=1;
+				//cout << lvz << "\n";
 				vp.push_back(vp_all[estep*NX+nstep+n*NX*NY]*1000);
 			}
 			
 			if (vs[0]==0)
 				// This still needs some work. Computation of dispersion curves does not work if top layer has vs=0
 				continue;
-			else{
+			else{				
 				// Calculation of velocity limits 
 				std::vector<double> c_lim = {0,0};
 				c_lim[0] = newton_vr(vp[0], vs[0])/1.05;
 				c_lim[1] = newton_vr(vp[nlay-1], vs[nlay-1])*1.05;
-				auto vsmin = *std::min_element(vs.begin(),vs.end());
+				double vsmin = *std::min_element(vs.begin(),vs.end());
+				
 				// step ratio for root bracketing
 				double stepratio = (vsmin - c_lim[0])/(2*vsmin);	
 	
@@ -401,21 +410,27 @@ int main(){
 				// Compute initial R1212 polarization for very low frequency		
 				double R1212 = compute_R1212(2*M_PI/200, c_lim[0], vp, vs, mu, depth, dens, nlay);
 				bool pol0 = signbit(R1212);
+				double c_last=0;
 				
 				// Loop over all periods/frequencies
-				for(int freq=0; freq<w.size(); freq++){
+				for(int freq=w.size()-1; freq>=0; freq--){
 					int citer = 0; // check for first iteration
 					double c0, c1;	// stores brackets
 					bool pol1 = pol0;	// initial polarization of R1212
+					double precision = 1;
+					
+					std::pair<double, double> brackets; // stores refinded root brackets
+					boost::uintmax_t max_iter=500;	// Maximum number of TOMS iterations (500 is probably way to much...)
 					
 					// Loop to find root brackets, breaks when sign of R1212 changes
 					while (pol0==pol1){
-						if (citer==0) // check for 1st iteration
+						if (citer==0){ // check for 1st iteration
 							c1 = c_lim[0];// set upper bracket to lower limit for c
 							citer = citer + 1;
+						}
 						else{
 							c0 = c1;	// set lower bracket to value of last iteration's upper bracket
-							c1 = c0 + c0*stepratio;	// increase upper bracket by step ratio
+							c1 = c0 + c0*(stepratio/precision);	// increase upper bracket by step ratio
 						}
 			
 						if (verbose==1)
@@ -423,14 +438,44 @@ int main(){
 						
 						// Check polarization of R1212 for the upper bracket	
 						R1212 = compute_R1212(w[freq], c1, vp, vs, mu, depth, dens, nlay);
-						pol1 = signbit(R1212);		
+						pol1 = signbit(R1212);
+						
+						// Check if dispersion curve is monotonous (not necessary if lvz detected)
+						if (pol0!=pol1){
+							if (lvz==0 & freq!=w.size()-1 & brackets.second>c_last){
+								precision = precision*10;
+								pol1 = pol0;
+								c1 = c0;
+								cout << "Error: Mode skipping detected!\n";
+							}
+							c_last = brackets.second;
+						}
+						
+						// If a sign change is found check for mode skipping
+						if (pol0!=pol1){
+							double c2=(c1+c0)/2;	// set new speed between brackets
+							// check sign of R1212 between brackets
+							while (c2>c1){
+								R1212 = compute_R1212(w[freq], c2, vp, vs, mu, depth, dens, nlay);
+								bool pol2 = signbit(R1212);
+								// if mode skipping detected increase precision (-> decrease step ratio) and return to bracket search
+								if (pol2==pol1){
+									precision = precision * 10;
+									pol1 = pol0;
+									c1 = c0;
+									cout << "Error: Mode skipping detected!\n";
+									continue;
+								}
+								// "Downward" search along c-axis for mode skipping (10 runs per default)
+								c2 = c2-(1/(10*precision))*((c0*stepratio)/(2*precision));
+							}
+							
+							
+							// If a sign change is found, brackets c1 & c2 are passed to an instance of R1212_root (-> Boost TOMS root finding algorithm)
+							R1212_root root(w[freq], vp, vs, mu, depth, dens, nlay);
+							brackets = boost::math::tools::toms748_solve(root, c0, c1, TerminationCondition(), max_iter);
+						}		
 					}
-					
-					// If a sign change is found, brackets c1 & c2 are passed to an instance of R1212 root (-> Boost TOMS root finding algorithm)
-					R1212_root root(w[freq], vp, vs, mu, depth, dens, nlay);
-					std::pair<double, double> brackets;
-					boost::uintmax_t max_iter=500;	// Maximum number of iterations (500 is probably way to much...)
-					brackets = boost::math::tools::toms748_solve(root, c0, c1, TerminationCondition(), max_iter);
 					
 					// Write output to file
 					resultfile << "\n" << east[estep] << "\t" << north[nstep] << "\t" << (2*M_PI)/w[freq] << "\t" << brackets.second << "\t" << brackets.second-brackets.first << "\t" << max_iter;
