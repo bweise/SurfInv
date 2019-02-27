@@ -23,10 +23,11 @@ typedef complex<double> dcomp;
 const std::complex<double> i(0, 1.0);
 
 bool verbose = 0; // set to 1 for more output
-double tolerance = 0.0001; // Precision for phase velocity [m/s]
+double tolerance = 0.0001; // Tolerance for phase velocity [m/s]
+double mode_skip_it = 10.0;	// Number of additional iterations to check for mode skipping & factor to increase precision
 
 // Perioden in sec
-std::vector<double> periods = {25,20};
+std::vector<double> periods = {5,20,10,40,0.1};
 
 // function of root of rayleigh velocity
 double compute_fvr(double vp, double vs, double vr){
@@ -393,7 +394,7 @@ int main(){
 					cout << "Kreisfrequenzen:\t";
 				}
 				
-				// Conversion of periods to frequencies
+				// Conversion of periods to angular frequencies
 				std::vector<double> w;
 				for(int n=0; n<periods.size(); n++){
 					w.push_back(2*M_PI/periods[n]);
@@ -407,31 +408,23 @@ int main(){
 					cout << "Schermodul unterste Schicht: " << mu << "\n"
 						<< "Polarisation von R1212 für geringe Geschwindigkeit: \n\n";
 				
-				// Compute initial R1212 polarization for very low frequency		
-				double R1212 = compute_R1212(2*M_PI/200, c_lim[0], vp, vs, mu, depth, dens, nlay);
+				// Compute initial R1212 polarization for large period (2000 s)	below fundamental mode
+				double R1212 = compute_R1212(2*M_PI/2000, c_lim[0], vp, vs, mu, depth, dens, nlay);
 				bool pol0 = signbit(R1212);
-				double c_last=0;
+				
+				double c_last=0;	// 
 				
 				// Loop over all periods/frequencies
 				for(int freq=w.size()-1; freq>=0; freq--){
-					int citer = 0; // check for first iteration
-					double c0, c1;	// stores brackets
+					double c0, c1 = c_lim[0];	// stores brackets
 					bool pol1 = pol0;	// initial polarization of R1212
 					double precision = 1;
 					
-					std::pair<double, double> brackets; // stores refinded root brackets
-					boost::uintmax_t max_iter=500;	// Maximum number of TOMS iterations (500 is probably way to much...)
-					
 					// Loop to find root brackets, breaks when sign of R1212 changes
 					while (pol0==pol1){
-						if (citer==0){ // check for 1st iteration
-							c1 = c_lim[0];// set upper bracket to lower limit for c
-							citer = citer + 1;
-						}
-						else{
-							c0 = c1;	// set lower bracket to value of last iteration's upper bracket
-							c1 = c0 + c0*(stepratio/precision);	// increase upper bracket by step ratio
-						}
+						cnt:;
+						c0 = c1;	// set lower bracket to value of last iteration's upper bracket
+						c1 = c0 + c0*(stepratio/precision);	// increase upper bracket by step ratio
 			
 						if (verbose==1)
 							cout << "Aktuelle Kreisfreq. & Geschwindigkeit: " << w[freq] << "\t" << c1 << "\n";
@@ -441,42 +434,53 @@ int main(){
 						pol1 = signbit(R1212);
 						
 						// Check if dispersion curve is monotonous (not necessary if lvz detected)
-						if (pol0!=pol1){
+						/*if (pol0!=pol1){
 							if (lvz==0 & freq!=w.size()-1 & brackets.second>c_last){
-								precision = precision*10;
+								precision = precision*mode_skip_it;
 								pol1 = pol0;
 								c1 = c0;
 								cout << "Error: Mode skipping detected!\n";
 							}
 							c_last = brackets.second;
-						}
+						}*/
 						
 						// If a sign change is found check for mode skipping
 						if (pol0!=pol1){
-							double c2=(c1+c0)/2;	// set new speed between brackets
+							double c2 = (c1+c0)/2;	// set new speed between brackets
+							double delta = (c2-c0)/mode_skip_it;
+							if (verbose==1){
+								cout << "c0: " << c0 << "\n";
+								cout << "c2: " << c2 << "\n";
+								cout << "c1: " << c1 << "\n";
+								cout << "precision: " << precision << "\n";
+								cout << "delta: " << delta << "\n";
+							}
 							// check sign of R1212 between brackets
-							while (c2>c1){
+							while (tolerance<(c2-c0)){
 								R1212 = compute_R1212(w[freq], c2, vp, vs, mu, depth, dens, nlay);
 								bool pol2 = signbit(R1212);
 								// if mode skipping detected increase precision (-> decrease step ratio) and return to bracket search
 								if (pol2==pol1){
-									precision = precision * 10;
+									precision = precision * mode_skip_it;
 									pol1 = pol0;
 									c1 = c0;
-									cout << "Error: Mode skipping detected!\n";
-									continue;
+									if (verbose==1)
+										cout << "Error: Mode skipping detected!\n";
+									goto cnt;
 								}
 								// "Downward" search along c-axis for mode skipping (10 runs per default)
-								c2 = c2-(1/(10*precision))*((c0*stepratio)/(2*precision));
+								c2 = c2-delta;
+								if (verbose==1)
+									cout << "New c2: " << c2 << "\n";
 							}
-							
-							
-							// If a sign change is found, brackets c1 & c2 are passed to an instance of R1212_root (-> Boost TOMS root finding algorithm)
-							R1212_root root(w[freq], vp, vs, mu, depth, dens, nlay);
-							brackets = boost::math::tools::toms748_solve(root, c0, c1, TerminationCondition(), max_iter);
 						}		
 					}
-					
+					// If a sign change is found, brackets c0 & c2 are passed to an instance of R1212_root (-> Boost TOMS root finding algorithm)
+					std::pair<double, double> brackets; // stores refinded root brackets
+					boost::uintmax_t max_iter=500;	// Maximum number of TOMS iterations (500 is probably way to much...)
+					R1212_root root(w[freq], vp, vs, mu, depth, dens, nlay);
+					brackets = boost::math::tools::toms748_solve(root, c0, c1, TerminationCondition(), max_iter);
+							
 					// Write output to file
 					resultfile << "\n" << east[estep] << "\t" << north[nstep] << "\t" << (2*M_PI)/w[freq] << "\t" << brackets.second << "\t" << brackets.second-brackets.first << "\t" << max_iter;
 				}
