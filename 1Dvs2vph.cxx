@@ -412,13 +412,16 @@ int main(){
 				double R1212 = compute_R1212(2*M_PI/2000, c_lim[0], vp, vs, mu, depth, dens, nlay);
 				bool pol0 = signbit(R1212);
 				
-				double c_last=0;	// 
+				double c_last=c_lim[0];	// 
 				
 				// Loop over all periods/frequencies
 				for(int freq=w.size()-1; freq>=0; freq--){
-					double c0, c1 = c_lim[0];	// stores brackets
+					double c0, c1 = c_last;	// stores brackets
 					bool pol1 = pol0;	// initial polarization of R1212
 					double precision = 1;
+					
+					if (lvz==1) // If there is a LVZ, we have to start at the lowest possible velocity
+						c1 = c_lim[0];
 					
 					// Loop to find root brackets, breaks when sign of R1212 changes
 					while (pol0==pol1){
@@ -433,21 +436,12 @@ int main(){
 						R1212 = compute_R1212(w[freq], c1, vp, vs, mu, depth, dens, nlay);
 						pol1 = signbit(R1212);
 						
-						// Check if dispersion curve is monotonous (not necessary if lvz detected)
-						/*if (pol0!=pol1){
-							if (lvz==0 & freq!=w.size()-1 & brackets.second>c_last){
-								precision = precision*mode_skip_it;
-								pol1 = pol0;
-								c1 = c0;
-								cout << "Error: Mode skipping detected!\n";
-							}
-							c_last = brackets.second;
-						}*/
-						
 						// If a sign change is found check for mode skipping
-						if (pol0!=pol1){
+						if (pol0!=pol1 & (c1-c0)>(2*tolerance)){
 							double c2 = (c1+c0)/2;	// set new speed between brackets
 							double delta = (c2-c0)/mode_skip_it;
+							if (delta < (mode_skip_it*tolerance))
+								delta = tolerance;
 							if (verbose==1){
 								cout << "c0: " << c0 << "\n";
 								cout << "c2: " << c2 << "\n";
@@ -462,7 +456,6 @@ int main(){
 								// if mode skipping detected increase precision (-> decrease step ratio) and return to bracket search
 								if (pol2==pol1){
 									precision = precision * mode_skip_it;
-									pol1 = pol0;
 									c1 = c0;
 									if (verbose==1)
 										cout << "Error: Mode skipping detected!\n";
@@ -480,9 +473,10 @@ int main(){
 					boost::uintmax_t max_iter=500;	// Maximum number of TOMS iterations (500 is probably way to much...)
 					R1212_root root(w[freq], vp, vs, mu, depth, dens, nlay);
 					brackets = boost::math::tools::toms748_solve(root, c0, c1, TerminationCondition(), max_iter);
+					c_last = (brackets.first + brackets.second)/2;
 							
 					// Write output to file
-					resultfile << "\n" << east[estep] << "\t" << north[nstep] << "\t" << (2*M_PI)/w[freq] << "\t" << brackets.second << "\t" << brackets.second-brackets.first << "\t" << max_iter;
+					resultfile << "\n" << east[estep] << "\t" << north[nstep] << "\t" << (2*M_PI)/w[freq] << "\t" << c_last << "\t" << brackets.second-brackets.first << "\t" << max_iter;
 				}
 			}
 		}
