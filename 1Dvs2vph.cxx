@@ -347,6 +347,8 @@ int main(){
 	// Sort vector of periods
 	std::sort(periods.begin(), periods.end());
 	
+	std::vector<double> dispersion;
+	
 	for (int estep = 0; estep<NY; estep++){
 		for (int nstep = 0; nstep<NX; nstep++){
 			std::vector<double> dens;
@@ -412,10 +414,10 @@ int main(){
 				double R1212 = compute_R1212(2*M_PI/2000, c_lim[0], vp, vs, mu, depth, dens, nlay);
 				bool pol0 = signbit(R1212);
 				
-				double c_last=c_lim[0];	// 
+				double c_last=c_lim[0];	//
 				
 				// Loop over all periods/frequencies
-				for(int freq=w.size()-1; freq>=0; freq--){
+				for(int freq=0; freq<w.size(); freq++){
 					double c0, c1 = c_last;	// stores brackets
 					bool pol1 = pol0;	// initial polarization of R1212
 					double precision = 1;
@@ -473,7 +475,16 @@ int main(){
 					boost::uintmax_t max_iter=500;	// Maximum number of TOMS iterations (500 is probably way to much...)
 					R1212_root root(w[freq], vp, vs, mu, depth, dens, nlay);
 					brackets = boost::math::tools::toms748_solve(root, c0, c1, TerminationCondition(), max_iter);
+					if (lvz == 0 & (brackets.first + brackets.second)/2 < c_last) {
+						c1 = c_lim[0];
+						precision = precision * mode_skip_it;
+						if (verbose==1)
+							cout << "Error: non-monotonous shape of dispersion curve!\n";
+						goto cnt;
+					}
 					c_last = (brackets.first + brackets.second)/2;
+					
+					dispersion.push_back(c_last);
 							
 					// Write output to file
 					resultfile << "\n" << east[estep] << "\t" << north[nstep] << "\t" << (2*M_PI)/w[freq] << "\t" << c_last << "\t" << brackets.second-brackets.first << "\t" << max_iter;
