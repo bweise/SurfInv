@@ -26,9 +26,6 @@ bool verbose = 0; // set to 1 for more output
 double tolerance = 0.0001; // Tolerance for phase velocity [m/s]
 double mode_skip_it = 10.0;	// Number of additional iterations to check for mode skipping & factor to increase precision
 
-// Perioden in sec
-std::vector<double> periods = {5,20,10,40,0.1};
-
 // function of root of rayleigh velocity
 double compute_fvr(double vp, double vs, double vr){
 	double fvr = 4.0-4.0*(pow(vr,2)/pow(vs,2))+pow(vr,4)/pow(vs,4)-4.0*sqrt(1-pow(vr,2)/pow(vp,2))*sqrt(1.0-pow(vr,2)/pow(vs,2));
@@ -299,6 +296,39 @@ struct TerminationCondition{
 
 int main(){
 	
+	// Read phase delay time observations
+	NcFile dtpFile("/home/bweise/bmw/MATLAB/matgsdf-master/dt_usarray.nc", NcFile::read);
+	NcDim nperiodsIn = dtpFile.getDim("NumberOfPeriods");
+	NcDim nstatsIn = dtpFile.getDim("NumberOfStations");
+	NcDim nraysIn = dtpFile.getDim("NumberOfRays");
+	int nperiods = nperiodsIn.getSize();
+	int nstats = nstatsIn.getSize();
+	int nrays = nraysIn.getSize();
+	
+	std::vector<double> periods(nperiods);
+	std::vector<double> mpx(nstats);
+	std::vector<double> mpy(nstats);
+	std::vector<double> mpz(nstats);
+	std::vector<double> src_rcvr_cmb(nrays*2.0);
+	std::vector<double> dtp(nrays*nperiods);
+	
+	NcVar periodsIn=dtpFile.getVar("Periods");
+	periodsIn.getVar(periods.data());
+	NcVar mpxIn=dtpFile.getVar("MeasPosX");
+	mpxIn.getVar(mpx.data());
+	NcVar mpyIn=dtpFile.getVar("MeasPosY");
+	mpyIn.getVar(mpy.data());
+	NcVar mpzIn=dtpFile.getVar("MeasPosZ");
+	mpzIn.getVar(mpz.data());
+	NcVar src_rcvr_cmbIn=dtpFile.getVar("SRCombinations");
+	src_rcvr_cmbIn.getVar(src_rcvr_cmb.data());
+	NcVar dtpIn=dtpFile.getVar("dtp");
+	dtpIn.getVar(dtp.data());
+	
+	int line = 10;
+	cout << src_rcvr_cmb[line] << "\t" << src_rcvr_cmb[line + nrays] << "\n";
+	cout << dtp[line] << "\t" << dtp[line + nrays] << "\t" << dtp[line + 2*nrays] << "\t" << dtp[line + 3*nrays] << "\t" << dtp[line + 4*nrays] << "\t" << dtp[line + 5*nrays] << "\t" << dtp[line + 6*nrays] << "\t" << dtp[line + 7*nrays] << "\n";
+	
 	// Read density, vs, vp from nc file
 	NcFile densFile("/home/bweise/bmw/WINTERC/dens_na.nc", NcFile::read);
 	NcFile vpFile("/home/bweise/bmw/WINTERC/vp_na.nc", NcFile::read);
@@ -492,6 +522,7 @@ int main(){
 			}
 		}
 	}
+	
 	
 	// close file and end program	
 	resultfile.close();
