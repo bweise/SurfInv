@@ -294,6 +294,11 @@ struct TerminationCondition{
 	}
 };
 
+std::vector<std::pair<double, double>> = get_waypoints(east1, north1, east2, north2, model_res){
+	const double R = 6371008.771 // Mean earth radius
+	a1 = atan2(cos(north2)
+}
+
 int main(){
 	
 	// Read phase delay time observations
@@ -306,18 +311,18 @@ int main(){
 	int nrays = nraysIn.getSize();
 	
 	std::vector<double> periods(nperiods);
-	std::vector<double> mpx(nstats);
-	std::vector<double> mpy(nstats);
+	std::vector<double> mpn(nstats);
+	std::vector<double> mpe(nstats);
 	std::vector<double> mpz(nstats);
 	std::vector<double> src_rcvr_cmb(nrays*2.0);
 	std::vector<double> dtp(nrays*nperiods);
 	
 	NcVar periodsIn=dtpFile.getVar("Periods");
 	periodsIn.getVar(periods.data());
-	NcVar mpxIn=dtpFile.getVar("MeasPosX");
-	mpxIn.getVar(mpx.data());
-	NcVar mpyIn=dtpFile.getVar("MeasPosY");
-	mpyIn.getVar(mpy.data());
+	NcVar mpnIn=dtpFile.getVar("MeasPosX");
+	mpnIn.getVar(mpn.data());
+	NcVar mpeIn=dtpFile.getVar("MeasPosY");
+	mpeIn.getVar(mpe.data());
 	NcVar mpzIn=dtpFile.getVar("MeasPosZ");
 	mpzIn.getVar(mpz.data());
 	NcVar src_rcvr_cmbIn=dtpFile.getVar("SRCombinations");
@@ -325,7 +330,11 @@ int main(){
 	NcVar dtpIn=dtpFile.getVar("dtp");
 	dtpIn.getVar(dtp.data());
 	
-	int line = 10;
+	int * dtp_dummy;
+	NcVarAtt dummy = dtpIn.getAtt("_FillValue");
+	dummy.getValues(dtp_dummy);
+	
+	double line = 12;
 	cout << src_rcvr_cmb[line] << "\t" << src_rcvr_cmb[line + nrays] << "\n";
 	cout << dtp[line] << "\t" << dtp[line + nrays] << "\t" << dtp[line + 2*nrays] << "\t" << dtp[line + 3*nrays] << "\t" << dtp[line + 4*nrays] << "\t" << dtp[line + 5*nrays] << "\t" << dtp[line + 6*nrays] << "\t" << dtp[line + 7*nrays] << "\n";
 	
@@ -368,6 +377,22 @@ int main(){
 	depth.pop_back();
 	depth.insert(depth.begin(), 0);
 	int nlay = depth.size();	// number of layers
+	
+	// get minimum extent of model cell
+	double diff_e = 99999999999, diff_n = 99999999999;
+	for(int estep=1; estep<NY; estep++){
+		double diff = abs(east[estep] - east[estep-1]);
+		if (diff < diff_e)
+			diff_e = diff;
+	}
+	for(int nstep=1; nstep<NY; nstep++){
+		double diff = abs(north[estep] - north[nstep-1]);
+		if (diff < diff_n)
+			diff_n = diff;
+	}
+	double model_res = diff_n;
+	if (diff_e < diff_n)
+		model_res = diff_e;
 	
 	// Open output file, write header line
 	ofstream resultfile;
@@ -518,13 +543,28 @@ int main(){
 							
 					// Write output to file
 					resultfile << "\n" << east[estep] << "\t" << north[nstep] << "\t" << (2*M_PI)/w[freq] << "\t" << c_last << "\t" << brackets.second-brackets.first << "\t" << max_iter;
-				}
-			}
-		}
-	}
+				} // end loop over frequencies
+			} 
+		} // end of loop over northing
+	} // end of loop over easting
 	
-	
-	// close file and end program	
+	// close file
 	resultfile.close();
+	
+	// loop over all rays, computes phase delays
+	for (int ray=0; ray<nrays; ray++){
+		for (int freq=0; freq<w.size(); freq++){
+			
+			if (dtp[ray,freq]==*dtp_dummy)
+				// if there is only a dummy value we can skip this period
+				continue;
+			else {				
+				auto wpts = get_waypoints(mpe[src_rcvr_cmp[ray,0]], mpn[src_rcvr_cmp[ray,0]], mpe[src_rcvr_cmp[ray,1]], mpn[src_rcvr_cmp[ray,1]], model_res);
+			}
+				
+		} // end loop frequencies
+	} // end loop rays
+	
+	// end program
 	return 0;
 }
