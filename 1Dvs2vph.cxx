@@ -305,17 +305,17 @@ int main(){
 	NcFile dtpFile("/home/bweise/bmw/MATLAB/matgsdf-master/dt_usarray_utm.nc", NcFile::read);
 	NcDim nperiodsIn = dtpFile.getDim("NumberOfPeriods");
 	NcDim nstatsIn = dtpFile.getDim("NumberOfStations");
-	NcDim nraysIn = dtpFile.getDim("NumberOfRays");
+	NcDim nsrcsIn = dtpFile.getDim("NumberOfRays");
 	int nperiods = nperiodsIn.getSize();
 	int nstats = nstatsIn.getSize();
-	int nrays = nraysIn.getSize();
+	int nsrcs = nsrcsIn.getSize();
 	
 	std::vector<double> periods(nperiods);
 	std::vector<double> mpn(nstats);
 	std::vector<double> mpe(nstats);
 	std::vector<double> mpz(nstats);
-	std::vector<double> src_rcvr_cmb(nrays*2.0);
-	std::vector<double> dtp(nrays*nperiods);
+	std::vector<double> src_rcvr_cmb(nsrcs*2.0);
+	std::vector<double> dtp(nsrcs*nperiods);
 	
 	NcVar periodsIn=dtpFile.getVar("Periods");
 	periodsIn.getVar(periods.data());
@@ -330,21 +330,22 @@ int main(){
 	NcVar dtpIn=dtpFile.getVar("dtp");
 	dtpIn.getVar(dtp.data());
 	
-	int * dtp_dummy;
+	double dtp_dummy;
+	double *dummy_pointer = &dtp_dummy;
 	NcVarAtt dummy = dtpIn.getAtt("_FillValue");
-	dummy.getValues(dtp_dummy);
+	dummy.getValues(dummy_pointer);
 	
 	// Conversion of periods to angular frequencies
 	std::vector<double> w;
-	for(int n=0; n<periods.size(); n++){
+	for(int n=0; n<nperiods; n++){
 		w.push_back(2.0*M_PI/periods[n]);
 		if (verbose==1)
 			cout << "Kreisfreq. " << n << ": " << w[n] << " rad/s\n";
 	}
 	
 	double line = 12;
-	cout << src_rcvr_cmb[line] << "\t" << src_rcvr_cmb[line + nrays] << "\n";
-	cout << dtp[line] << "\t" << dtp[line + nrays] << "\t" << dtp[line + 2*nrays] << "\t" << dtp[line + 3*nrays] << "\t" << dtp[line + 4*nrays] << "\t" << dtp[line + 5*nrays] << "\t" << dtp[line + 6*nrays] << "\t" << dtp[line + 7*nrays] << "\n";
+	cout << src_rcvr_cmb[line] << "\t" << src_rcvr_cmb[line + nsrcs] << "\n";
+	cout << dtp[line] << "\t" << dtp[line + nsrcs] << "\t" << dtp[line + 2*nsrcs] << "\t" << dtp[line + 3*nsrcs] << "\t" << dtp[line + 4*nsrcs] << "\t" << dtp[line + 5*nsrcs] << "\t" << dtp[line + 6*nsrcs] << "\t" << dtp[line + 7*nsrcs] << "\n";
 	
 	// Read density, vs, vp from nc file
 	NcFile densFile("/home/bweise/bmw/WINTERC/dens_na_neu_utm.nc", NcFile::read);
@@ -381,10 +382,11 @@ int main(){
 	NcVar vpIn=vpFile.getVar("Vp");
 	vpIn.getVar(vp_all.data());
 	
-	// Generate additional "0" to start vector of depths
-	depth.pop_back();
-	depth.insert(depth.begin(), 0);
+	// Shift vector of depths so that it starts from 0
 	int nlay = depth.size();	// number of layers
+	for(int n=nlay-1; n>=0; n--){
+		depth[n] = depth[n] - depth[0];
+	}
 	
 	// get minimum extent of model cell
 	double diff_e = 99999999999, diff_n = 99999999999;
@@ -420,20 +422,19 @@ int main(){
 			bool lvz=0;
 			for (int n=0; n<nlay; n++){
 				// sort velocities, densities into 1D models 
-				dens.push_back(dens_all[estep*NX+nstep+n*NX*NY]);
-				vs.push_back(vs_all[estep*NX+nstep+n*NX*NY]);
-				//cout << vs[n] << "\n";
+				dens.push_back(dens_all[n+nlay*estep+NY*nlay*nstep]);
+				vs.push_back(vs_all[n+nlay*estep+NY*nlay*nstep]);
 				// check if there's a low velocity zone
 				if (n>0 & vs[n]<vs[n-1])
 					lvz=1;
 				//cout << lvz << "\n";
-				vp.push_back(vp_all[estep*NX+nstep+n*NX*NY]);
+				vp.push_back(vp_all[n+nlay*estep+NY*nlay*nstep]);
 			}
 			
 			if (vs[0]<=0){
 				// This still needs some work. Computation of dispersion curves does not work if top layer has vs=0
 				dispersion.push_back(0.0);
-				for(int freq=0; freq<w.size(); freq++)
+				for(int freq=0; freq<nperiods; freq++)
 					resultfile << "\n" << east[estep] << "\t" << north[nstep] << "\t" << (2.0*M_PI)/w[freq] << "\t" << 0.0 << "\t" << 0.0 << "\t" << 0.0;
 				continue;
 			}
@@ -474,7 +475,7 @@ int main(){
 				double c_last=c_lim[0];	//
 				
 				// Loop over all periods/frequencies
-				for(int freq=0; freq<w.size(); freq++){
+				for(int freq=0; freq<nperiods; freq++){
 					double c0, c1 = c_last;	// stores brackets
 					bool pol1 = pol0;	// initial polarization of R1212
 					double precision = 1;
@@ -554,15 +555,15 @@ int main(){
 	resultfile.close();
 	
 	// loop over all rays, computes phase delays
-	for (int ray=0; ray<nrays; ray++){
-		for (int freq=0; freq<w.size(); freq++){
+	for (int src=0; src<nsrcs; src++){
+		for (int freq=0; freq<nperiods; freq++){
 			
-			if (dtp[ray,freq]==*dtp_dummy)
+			 if (dtp[src + (freq*nsrcs)]==dtp_dummy)
 				// if there is only a dummy value we can skip this period
 				continue;
 			else {				
 				cout << "The End!\n";
-				// auto wpts = get_waypoints(mpe[src_rcvr_cmb[ray]], mpn[src_rcvr_cmb[ray]], mpe[src_rcvr_cmb[ray+nrays]], mpn[src_rcvr_cmb[ray+nrays]], model_res);
+				// auto wpts = get_waypoints(mpe[src_rcvr_cmb[src]], mpn[src_rcvr_cmb[src]], mpe[src_rcvr_cmb[src+nsrcs]], mpn[src_rcvr_cmb[src+nsrcs]], model_res);
 			}
 				
 		} // end loop frequencies
