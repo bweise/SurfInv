@@ -23,7 +23,7 @@ typedef complex<double> dcomp;
 const std::complex<double> i(0, 1.0);
 
 bool verbose = 0; // set to 1 for more output
-double tolerance = 0.0001; // Tolerance for phase velocity [m/s]
+double tolerance = 0.01; // Tolerance for phase velocity [m/s]
 double mode_skip_it = 10.0;	// Number of additional iterations to check for mode skipping & factor to increase precision
 
 // function of root of rayleigh velocity
@@ -294,15 +294,15 @@ struct TerminationCondition{
 	}
 };
 
-std::vector<std::pair<double, double>> = get_waypoints(east1, north1, east2, north2, model_res){
+/* std::vector<std::pair<double, double>> = get_waypoints(east1, north1, east2, north2, model_res){
 	const double R = 6371008.771 // Mean earth radius
-	a1 = atan2(cos(north2)
-}
+	a1 = atan2(cos(north2));
+} */
 
 int main(){
 	
 	// Read phase delay time observations
-	NcFile dtpFile("/home/bweise/bmw/MATLAB/matgsdf-master/dt_usarray.nc", NcFile::read);
+	NcFile dtpFile("/home/bweise/bmw/MATLAB/matgsdf-master/dt_usarray_utm.nc", NcFile::read);
 	NcDim nperiodsIn = dtpFile.getDim("NumberOfPeriods");
 	NcDim nstatsIn = dtpFile.getDim("NumberOfStations");
 	NcDim nraysIn = dtpFile.getDim("NumberOfRays");
@@ -334,14 +334,22 @@ int main(){
 	NcVarAtt dummy = dtpIn.getAtt("_FillValue");
 	dummy.getValues(dtp_dummy);
 	
+	// Conversion of periods to angular frequencies
+	std::vector<double> w;
+	for(int n=0; n<periods.size(); n++){
+		w.push_back(2.0*M_PI/periods[n]);
+		if (verbose==1)
+			cout << "Kreisfreq. " << n << ": " << w[n] << " rad/s\n";
+	}
+	
 	double line = 12;
 	cout << src_rcvr_cmb[line] << "\t" << src_rcvr_cmb[line + nrays] << "\n";
 	cout << dtp[line] << "\t" << dtp[line + nrays] << "\t" << dtp[line + 2*nrays] << "\t" << dtp[line + 3*nrays] << "\t" << dtp[line + 4*nrays] << "\t" << dtp[line + 5*nrays] << "\t" << dtp[line + 6*nrays] << "\t" << dtp[line + 7*nrays] << "\n";
 	
 	// Read density, vs, vp from nc file
-	NcFile densFile("/home/bweise/bmw/WINTERC/dens_na.nc", NcFile::read);
-	NcFile vpFile("/home/bweise/bmw/WINTERC/vp_na.nc", NcFile::read);
-	NcFile vsFile("/home/bweise/bmw/WINTERC/vs_na.nc", NcFile::read);
+	NcFile densFile("/home/bweise/bmw/WINTERC/dens_na_neu_utm.nc", NcFile::read);
+	NcFile vpFile("/home/bweise/bmw/WINTERC/vp_na_neu_utm.nc", NcFile::read);
+	NcFile vsFile("/home/bweise/bmw/WINTERC/vs_na_neu_utm.nc", NcFile::read);
 	
 	// Get dimensions of model
 	NcDim nxIn=densFile.getDim("Northing");
@@ -386,7 +394,7 @@ int main(){
 			diff_e = diff;
 	}
 	for(int nstep=1; nstep<NY; nstep++){
-		double diff = abs(north[estep] - north[nstep-1]);
+		double diff = abs(north[nstep] - north[nstep-1]);
 		if (diff < diff_n)
 			diff_n = diff;
 	}
@@ -413,18 +421,22 @@ int main(){
 			for (int n=0; n<nlay; n++){
 				// sort velocities, densities into 1D models 
 				dens.push_back(dens_all[estep*NX+nstep+n*NX*NY]);
-				vs.push_back(vs_all[estep*NX+nstep+n*NX*NY]*1000);
+				vs.push_back(vs_all[estep*NX+nstep+n*NX*NY]);
 				//cout << vs[n] << "\n";
 				// check if there's a low velocity zone
 				if (n>0 & vs[n]<vs[n-1])
 					lvz=1;
 				//cout << lvz << "\n";
-				vp.push_back(vp_all[estep*NX+nstep+n*NX*NY]*1000);
+				vp.push_back(vp_all[estep*NX+nstep+n*NX*NY]);
 			}
 			
-			if (vs[0]==0)
+			if (vs[0]<=0){
 				// This still needs some work. Computation of dispersion curves does not work if top layer has vs=0
+				dispersion.push_back(0.0);
+				for(int freq=0; freq<w.size(); freq++)
+					resultfile << "\n" << east[estep] << "\t" << north[nstep] << "\t" << (2.0*M_PI)/w[freq] << "\t" << 0.0 << "\t" << 0.0 << "\t" << 0.0;
 				continue;
+			}
 			else{				
 				// Calculation of velocity limits 
 				std::vector<double> c_lim = {0,0};
@@ -433,7 +445,7 @@ int main(){
 				double vsmin = *std::min_element(vs.begin(),vs.end());
 				
 				// step ratio for root bracketing
-				double stepratio = (vsmin - c_lim[0])/(2*vsmin);	
+				double stepratio = (vsmin - c_lim[0])/(2.0*vsmin);	
 	
 				if(verbose==1){
 					cout << "cmin: " << c_lim[0] << "\t cmax: " << c_lim[1] << "\n";
@@ -447,16 +459,6 @@ int main(){
 					cout << "Letzte Schicht ab " << depth[nlay-1] << " m: vs = "
 						<< vs[nlay-1] << " m/s, vp = " << vp[nlay-1]
 						<< " m/s, Dichte = " << dens[nlay-1] << " kg/m3.\n";
-		
-					cout << "Kreisfrequenzen:\t";
-				}
-				
-				// Conversion of periods to angular frequencies
-				std::vector<double> w;
-				for(int n=0; n<periods.size(); n++){
-					w.push_back(2*M_PI/periods[n]);
-					if (verbose==1)
-						cout << w[n] << " rad/s\n";
 				}
 				
 				// Shear modulus bottom layer
@@ -466,7 +468,7 @@ int main(){
 						<< "Polarisation von R1212 für geringe Geschwindigkeit: \n\n";
 				
 				// Compute initial R1212 polarization for large period (2000 s)	below fundamental mode
-				double R1212 = compute_R1212(2*M_PI/2000, c_lim[0], vp, vs, mu, depth, dens, nlay);
+				double R1212 = compute_R1212(2.0*M_PI/2000.0, c_lim[0], vp, vs, mu, depth, dens, nlay);
 				bool pol0 = signbit(R1212);
 				
 				double c_last=c_lim[0];	//
@@ -494,8 +496,8 @@ int main(){
 						pol1 = signbit(R1212);
 						
 						// If a sign change is found check for mode skipping
-						if (pol0!=pol1 & (c1-c0)>(2*tolerance)){
-							double c2 = (c1+c0)/2;	// set new speed between brackets
+						if (pol0!=pol1 & (c1-c0)>(2.0*tolerance)){
+							double c2 = (c1+c0)/2.0;	// set new speed between brackets
 							double delta = (c2-c0)/mode_skip_it;
 							if (delta < (mode_skip_it*tolerance))
 								delta = tolerance;
@@ -530,19 +532,19 @@ int main(){
 					boost::uintmax_t max_iter=500;	// Maximum number of TOMS iterations (500 is probably way to much...)
 					R1212_root root(w[freq], vp, vs, mu, depth, dens, nlay);
 					brackets = boost::math::tools::toms748_solve(root, c0, c1, TerminationCondition(), max_iter);
-					if (lvz == 0 & (brackets.first + brackets.second)/2 < c_last) {
+					if (lvz == 0 & (brackets.first + brackets.second)/2.0 < c_last) {
 						c1 = c_lim[0];
 						precision = precision * mode_skip_it;
 						if (verbose==1)
 							cout << "Error: non-monotonous shape of dispersion curve!\n";
 						goto cnt;
 					}
-					c_last = (brackets.first + brackets.second)/2;
+					c_last = (brackets.first + brackets.second)/2.0;
 					
 					dispersion.push_back(c_last);
 							
 					// Write output to file
-					resultfile << "\n" << east[estep] << "\t" << north[nstep] << "\t" << (2*M_PI)/w[freq] << "\t" << c_last << "\t" << brackets.second-brackets.first << "\t" << max_iter;
+					resultfile << "\n" << east[estep] << "\t" << north[nstep] << "\t" << (2.0*M_PI)/w[freq] << "\t" << c_last << "\t" << brackets.second-brackets.first << "\t" << max_iter;
 				} // end loop over frequencies
 			} 
 		} // end of loop over northing
@@ -559,7 +561,8 @@ int main(){
 				// if there is only a dummy value we can skip this period
 				continue;
 			else {				
-				auto wpts = get_waypoints(mpe[src_rcvr_cmp[ray,0]], mpn[src_rcvr_cmp[ray,0]], mpe[src_rcvr_cmp[ray,1]], mpn[src_rcvr_cmp[ray,1]], model_res);
+				cout << "The End!\n";
+				// auto wpts = get_waypoints(mpe[src_rcvr_cmb[ray]], mpn[src_rcvr_cmb[ray]], mpe[src_rcvr_cmb[ray+nrays]], mpn[src_rcvr_cmb[ray+nrays]], model_res);
 			}
 				
 		} // end loop frequencies
