@@ -41,7 +41,7 @@ double compute_dfvr(double vp, double vs, double vr){
 // computation of Rayleigh velocity of homogenous half space using Newton Raphson method
 double newton_vr(double vp, double vs){
 	// variables to store rayleigh velocity
-	double vrlast = vs-1;
+	double vrlast = vs*0.99;
 	double vr;
 	double diff=99999.0;
 	// calculate Rayleigh velocity for homogenous half space
@@ -100,12 +100,12 @@ std::tuple<dcomp,dcomp,double,double,double,double,double,dcomp,dcomp,double> co
 	dcomp kvnorm = kv/k;
 	double l = 2.0*pow(k,2)-pow(w/vs,2);
 	
-	if (verbose==1){
+	/*if (verbose==1){
 		cout << "hv: " << hv << " kv: " << kv << "\n"
 			<< "hvnorm: " << hvnorm << " kvnorm: " << kvnorm << "\n"
 			<< "SH: " << SH << " SK: " << SK << " CH: " << CH << " CK: " << CK << "\n"
 			<< "gamma: " << gam << " l: " << l << "\n\n";
-	}
+	}*/
 	
 	return std::make_tuple(hv, kv, SH, CH, SK, CK, gam, hvnorm, kvnorm, l);
 }
@@ -126,14 +126,14 @@ std::tuple<double,double,double,double,double> compute_T(double w, double c, dou
 	double T1224 = std::real(mu*hv*pow(kv,2)*(2.0*pow(k,2)-l)*fact);
 	double T1234 = std::real(hv*kv*(pow(k,2)-hv*kv)*fact);
 	
-	if (verbose==1) {
+	/*if (verbose==1) {
 		cout << "factor: " << fact << "\n"
 			<< "T1212: " << T1212 << "\t"
 			<< "T1213: " << T1213 << "\t"
 			<< "iT1214: " << iT1214 << "\t"
 			<< "T1224: " << T1224 << "\t"
 			<< "T1234: " << T1234 << "\n\n";
-	}
+	}*/
 	return std::make_tuple(T1212,T1213,iT1214,T1224,T1234);
 }
 
@@ -164,14 +164,14 @@ std::tuple<double,double,double,double,double,double,double,double,double,double
 	double G2413 = std::real((-1.0)*pow(hvnorm,2)*SH*SK);
 	double G3412 = std::real((-1.0)*pow(dens,2)*pow(w,2)*pow(c,2)*(2.0*pow(gam,2)*pow(1.0 - gam,2)*(1.0 - CH*CK) + (pow(1.0 - gam,4)+pow(gam,4)*pow(hvnorm,2)*pow(kvnorm,2))*SH*SK));
 	
-	if (verbose==1){
+	/*if (verbose==1){
 		cout << "G-Komponenten:\n"
 			<< "G1212: " << G1212 << " G1213: " << G1213 << " iG1214: " << iG1214 << " G1224: " << G1224 << " G1234: " << G1234 << "\n"
 			<< "G1312: " << G1312 << " G1313: " << G1313 << " iG1314: " << iG1314 << " G1324: " << G1324 << "\n"
 			<< "iG1412: " << iG1412 << " iG1413: " << iG1413 << " G1414: " << G1414 << "\n"
 			<< "G2412: " << G2412 << " G2413: " << G2413 << "\n"
 			<< "G3412: " << G3412 << "\n\n";
-	}
+	}*/
 		
 	return std::make_tuple(G1212,G1213,iG1214,G1224,G1234,G1312,G1313,iG1314,G1324,iG1412,iG1413,G1414,G2412,G2413,G3412);
 }
@@ -239,13 +239,13 @@ std::tuple<double,double,double,double,double> compute_R(double w, double c, dou
 		R1234 = maxR*R1234;
 	}
 	
-	if (verbose==1) {
+	/*if (verbose==1) {
 		cout << "R1212: " << R1212 << "\n"
 		<< "R1213: " << R1213 << "\n"
 		<< "iR1214: " << iR1214 << "\n"
 		<< "R1224: " << R1224 << "\n"
 		<< "R1234: " << R1234 << "\n\n";
-	}
+	}*/
 	
 	return std::make_tuple(R1212,R1213,iR1214,R1224,R1234);
 }
@@ -254,16 +254,16 @@ double compute_R1212(double w, double c, std::vector<double> vp, std::vector<dou
 	// Recursive layer stacking from bottom to top to get R1212
 	std::tuple<double,double,double,double,double> R;
 	for(int n=nlay-1;n>=0;n--){
-		if (verbose==1){
+		/*if (verbose==1){
 			cout << "Schicht: " << n+1 << "\n";
 			cout << "Geschwindigkeiten: " << vp[n] << "\t" << vs[n] << "\n";
-		}
+		}*/
 		if (n==nlay-1)
 			R = compute_T(w, c, vp[n], vs[n], mu);
 		else {
 			double dn = depth[n+1]-depth[n];
-			if (verbose==1)
-				cout << "Schichtdicke: " << dn << "m\n";
+			/*if (verbose==1)
+				cout << "Schichtdicke: " << dn << "m\n";*/
 			R = compute_R(w, c, vp[n], vs[n], dn, dens[n], R);
 		}
 	}
@@ -294,10 +294,45 @@ struct TerminationCondition{
 	}
 };
 
-/* std::vector<std::pair<double, double>> = get_waypoints(east1, north1, east2, north2, model_res){
-	const double R = 6371008.771 // Mean earth radius
-	a1 = atan2(cos(north2));
-} */
+double get_t_segments(double east0, double north0, double east1, double north1, std::vector<double> origin, double deast, double dnorth, std::vector<double> c, int ncells_north, int freq, int nperiods){
+	 
+	if(east1 < east0){
+		double tmp = east0;
+		east0 = east1;
+		east1 = tmp;
+		tmp = north0;
+		north0 = north1;
+		north1 = tmp;
+	}
+	double slope = (north1-north0)/(east1-east0);
+	double intercept = (-1.0)*slope*east0+north0;
+	double ecell0 = floor((east0-origin[0])/deast);
+	double ncell0 = floor((north0-origin[1])/dnorth);
+	double ecell1 = floor((east1-origin[0])/deast);
+	double ncell1 = floor((north1-origin[1])/dnorth);
+	double time = 0.0;
+	 
+	while((ecell0 < ecell1) & (ncell0 < ncell1)){
+		double north_intercept = ((origin[1]+(ncell0+1)*dnorth)-intercept)/slope;
+		double east_intercept = origin[0]+(ecell0+1)*deast;
+		if(north_intercept < east_intercept){
+			double dist_segment = sqrt(pow(north_intercept-east0, 2.0) + pow((origin[1]+(ncell0+1)*dnorth)-north0, 2.0));
+			time = time + dist_segment/c[ecell0 * ncells_north * nperiods + ncell0 * nperiods + freq];
+			north0 = origin[1]+(ncell0+1)*dnorth;
+			east0 = north_intercept;
+			ncell0 = ncell0 + (slope/abs(slope));
+		}
+		else {
+			double dist_segment = sqrt(pow(east_intercept-east0, 2.0) + pow((slope*east_intercept+intercept)-north0, 2.0));
+			time = time + dist_segment/c[ecell0 * ncells_north * nperiods + ncell0 * nperiods + freq];
+			east0 = east_intercept;
+			north0 = slope*east_intercept+intercept;
+			ecell0 = ecell0 + 1.0;
+		}
+	}
+	time = time + (sqrt(pow(east1-east0, 2.0) + pow(north1-north0, 2.0))/c[ecell1 * ncells_north * nperiods + ncell1 * nperiods + freq]);
+	return time;
+}
 
 int main(){
 	
@@ -306,9 +341,11 @@ int main(){
 	NcDim nperiodsIn = dtpFile.getDim("NumberOfPeriods");
 	NcDim nstatsIn = dtpFile.getDim("NumberOfStations");
 	NcDim nsrcsIn = dtpFile.getDim("NumberOfRays");
+	NcDim neventsIn = dtpFile.getDim("NumberOfEvents");
 	int nperiods = nperiodsIn.getSize();
 	int nstats = nstatsIn.getSize();
 	int nsrcs = nsrcsIn.getSize();
+	int nevents = neventsIn.getSize();
 	
 	std::vector<double> periods(nperiods);
 	std::vector<double> mpn(nstats);
@@ -316,6 +353,9 @@ int main(){
 	std::vector<double> mpz(nstats);
 	std::vector<double> src_rcvr_cmb(nsrcs*2.0);
 	std::vector<double> dtp(nsrcs*nperiods);
+	std::vector<double> event_stat_cmb(nsrcs);
+	std::vector<double> eventx(nevents);
+	std::vector<double> eventy(nevents);
 	
 	NcVar periodsIn=dtpFile.getVar("Periods");
 	periodsIn.getVar(periods.data());
@@ -325,10 +365,16 @@ int main(){
 	mpeIn.getVar(mpe.data());
 	NcVar mpzIn=dtpFile.getVar("MeasPosZ");
 	mpzIn.getVar(mpz.data());
-	NcVar src_rcvr_cmbIn=dtpFile.getVar("SRCombinations");
+	NcVar src_rcvr_cmbIn=dtpFile.getVar("StatComb");
 	src_rcvr_cmbIn.getVar(src_rcvr_cmb.data());
 	NcVar dtpIn=dtpFile.getVar("dtp");
 	dtpIn.getVar(dtp.data());
+	NcVar event_stat_cmbIn=dtpFile.getVar("EventStatComb");
+	event_stat_cmbIn.getVar(event_stat_cmb.data());
+	NcVar eventxIn=dtpFile.getVar("EventPosX");
+	eventxIn.getVar(eventx.data());
+	NcVar eventyIn=dtpFile.getVar("EventPosY");
+	eventyIn.getVar(eventy.data());
 	
 	double dtp_dummy;
 	double *dummy_pointer = &dtp_dummy;
@@ -342,10 +388,6 @@ int main(){
 		if (verbose==1)
 			cout << "Kreisfreq. " << n << ": " << w[n] << " rad/s\n";
 	}
-	
-	double line = 12;
-	cout << src_rcvr_cmb[line] << "\t" << src_rcvr_cmb[line + nsrcs] << "\n";
-	cout << dtp[line] << "\t" << dtp[line + nsrcs] << "\t" << dtp[line + 2*nsrcs] << "\t" << dtp[line + 3*nsrcs] << "\t" << dtp[line + 4*nsrcs] << "\t" << dtp[line + 5*nsrcs] << "\t" << dtp[line + 6*nsrcs] << "\t" << dtp[line + 7*nsrcs] << "\n";
 	
 	// Read density, vs, vp from nc file
 	NcFile densFile("/home/bweise/bmw/WINTERC/dens_na_neu_utm.nc", NcFile::read);
@@ -384,30 +426,18 @@ int main(){
 	
 	// Shift vector of depths so that it starts from 0
 	int nlay = depth.size();	// number of layers
-	for(int n=nlay-1; n>=0; n--){
+	for(int n=nlay-1; n>=0; n--)
 		depth[n] = depth[n] - depth[0];
-	}
 	
-	// get minimum extent of model cell
-	double diff_e = 99999999999, diff_n = 99999999999;
-	for(int estep=1; estep<NY; estep++){
-		double diff = abs(east[estep] - east[estep-1]);
-		if (diff < diff_e)
-			diff_e = diff;
-	}
-	for(int nstep=1; nstep<NY; nstep++){
-		double diff = abs(north[nstep] - north[nstep-1]);
-		if (diff < diff_n)
-			diff_n = diff;
-	}
-	double model_res = diff_n;
-	if (diff_e < diff_n)
-		model_res = diff_e;
+	// get model cell sizes (east and northwards)
+	double model_cell_east = east[1] - east[0];
+	double model_cell_north = north[1] - north[0];
+	std::vector<double> model_origin = {east[0], north[0]};
 	
 	// Open output file, write header line
 	ofstream resultfile;
 	resultfile.open ("dispersion.out");
-	resultfile << "# Easting [m] \t Northing [m] \t Period [s] \t Phase velocity [m/s] \t Differenz [m/s] \t Anzahl Iterationen";
+	resultfile << "# Easting [m] \t Northing [m] \t Period [s] \t Phase velocity [m/s] \t Difference [m/s] \t No. of iterations";
 	
 	// Sort vector of periods
 	std::sort(periods.begin(), periods.end());
@@ -433,17 +463,21 @@ int main(){
 			
 			if (vs[0]<=0){
 				// This still needs some work. Computation of dispersion curves does not work if top layer has vs=0
-				dispersion.push_back(0.0);
-				for(int freq=0; freq<nperiods; freq++)
+				for(int freq=0; freq<nperiods; freq++){
+					dispersion.push_back(0.0);
 					resultfile << "\n" << east[estep] << "\t" << north[nstep] << "\t" << (2.0*M_PI)/w[freq] << "\t" << 0.0 << "\t" << 0.0 << "\t" << 0.0;
+				}
 				continue;
 			}
 			else{				
 				// Calculation of velocity limits 
-				std::vector<double> c_lim = {0,0};
-				c_lim[0] = newton_vr(vp[0], vs[0])/1.05;
-				c_lim[1] = newton_vr(vp[nlay-1], vs[nlay-1])*1.05;
+				std::vector<double> c_lim={0,0};
 				double vsmin = *std::min_element(vs.begin(),vs.end());
+				double vsmax = *std::max_element(vs.begin(),vs.end());
+				double vpmin = *std::min_element(vp.begin(),vp.end());
+				double vpmax = *std::max_element(vp.begin(),vp.end());
+				c_lim[0] = newton_vr(vpmin, vsmin)/1.05;
+				c_lim[1] = newton_vr(vpmax, vsmax)*1.05;
 				
 				// step ratio for root bracketing
 				double stepratio = (vsmin - c_lim[0])/(2.0*vsmin);	
@@ -465,12 +499,14 @@ int main(){
 				// Shear modulus bottom layer
 				double mu = pow(vs[nlay-1],2)*dens[nlay-1];
 				if (verbose==1)
-					cout << "Schermodul unterste Schicht: " << mu << "\n"
-						<< "Polarisation von R1212 für geringe Geschwindigkeit: \n\n";
+					cout << "Schermodul unterste Schicht: " << mu << "\n";
 				
 				// Compute initial R1212 polarization for large period (2000 s)	below fundamental mode
 				double R1212 = compute_R1212(2.0*M_PI/2000.0, c_lim[0], vp, vs, mu, depth, dens, nlay);
 				bool pol0 = signbit(R1212);
+				
+				if(verbose==1)
+					cout << "Polarisation von R1212 für geringe Geschwindigkeit: " << pol0 << "\n";
 				
 				double c_last=c_lim[0];	//
 				
@@ -489,8 +525,10 @@ int main(){
 						c0 = c1;	// set lower bracket to value of last iteration's upper bracket
 						c1 = c0 + c0*(stepratio/precision);	// increase upper bracket by step ratio
 			
-						if (verbose==1)
+						if (verbose==1){
+							cout << "c0: " << c0 << "\t" << "stepratio: " << stepratio << "\t" << "precision: " << precision << "\n";
 							cout << "Aktuelle Kreisfreq. & Geschwindigkeit: " << w[freq] << "\t" << c1 << "\n";
+						}
 						
 						// Check polarization of R1212 for the upper bracket	
 						R1212 = compute_R1212(w[freq], c1, vp, vs, mu, depth, dens, nlay);
@@ -517,8 +555,10 @@ int main(){
 								if (pol2==pol1){
 									precision = precision * mode_skip_it;
 									c1 = c0;
-									if (verbose==1)
+									if (verbose==1){
 										cout << "Error: Mode skipping detected!\n";
+										//cin.get();
+									}
 									goto cnt;
 								}
 								// "Downward" search along c-axis for mode skipping (10 runs per default)
@@ -552,23 +592,35 @@ int main(){
 	} // end of loop over easting
 	
 	// close file
+	resultfile << "\n";
 	resultfile.close();
+	
+	ofstream delayfile;
+	delayfile.open ("delays.out");
+	delayfile << "#Easting_epi [m] \t Northing_epi [m] \t Event_num \t Easting_stat1 [m] \t Northing_stat1 [m] \t Easting_stat2 [m] \t Northing_stat2 [m] \t stat1_num \t stat2_num \t Period [s] \t Phase delay [s]";
 	
 	// loop over all rays, computes phase delays
 	for (int src=0; src<nsrcs; src++){
+		//std::vector< std::pair <double,double> > segments;
+		//segments = get_segments(TO BE WRITTEN);
 		for (int freq=0; freq<nperiods; freq++){
 			
-			 if (dtp[src + (freq*nsrcs)]==dtp_dummy)
+			if (dtp[src + (freq*nsrcs)]==dtp_dummy){
 				// if there is only a dummy value we can skip this period
+				delayfile << "\n" << eventx[event_stat_cmb[src]] << "\t" << eventy[event_stat_cmb[src]] << "\t" << event_stat_cmb[src] << "\t" << mpe[src_rcvr_cmb[src]] << "\t" << mpn[src_rcvr_cmb[src]] << "\t" << mpe[src_rcvr_cmb[src+nsrcs]] << "\t" << mpn[src_rcvr_cmb[src+nsrcs]] << "\t" << src_rcvr_cmb[src] << "\t" << src_rcvr_cmb[src+nsrcs] << "\t" << (2.0*M_PI)/w[freq] << "\t" << 0.0;
 				continue;
-			else {				
-				cout << "The End!\n";
-				// auto wpts = get_waypoints(mpe[src_rcvr_cmb[src]], mpn[src_rcvr_cmb[src]], mpe[src_rcvr_cmb[src+nsrcs]], mpn[src_rcvr_cmb[src+nsrcs]], model_res);
+			}
+			else {
+				// LOOP OVER SEGMENTS HERE!!
+				double time_segment = get_t_segments(mpe[src_rcvr_cmb[src]], mpn[src_rcvr_cmb[src]], mpe[src_rcvr_cmb[src+nsrcs]], mpn[src_rcvr_cmb[src+nsrcs]], model_origin, model_cell_east, model_cell_north, dispersion, NX, freq, nperiods);
+				delayfile << "\n" << eventx[event_stat_cmb[src]] << "\t" << eventy[event_stat_cmb[src]] << "\t" << event_stat_cmb[src] << "\t" << mpe[src_rcvr_cmb[src]] << "\t" << mpn[src_rcvr_cmb[src]] << "\t" << mpe[src_rcvr_cmb[src+nsrcs]] << "\t" << mpn[src_rcvr_cmb[src+nsrcs]] << "\t" << src_rcvr_cmb[src] << "\t" << src_rcvr_cmb[src+nsrcs] << "\t" << (2.0*M_PI)/w[freq] << "\t" << time_segment;
 			}
 				
 		} // end loop frequencies
 	} // end loop rays
 	
+	delayfile << "\n";
+	delayfile.close();
 	// end program
 	return 0;
 }
