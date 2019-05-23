@@ -1,6 +1,7 @@
 /* 1Dvs2vph
  * Berechnet aus einem 1D Vs,Vp,Dichte-Modell die Phasengeschwindigkeit
  * zu gegebenen Perioden.
+ * Verwendet boost, netcdf und geographic Bibliotheken.
  * Quellen: Haskell (1953), Dunkin (1965), Wathelet (2005),
  * Cercato (2007)
  */
@@ -14,10 +15,11 @@
 #include <fstream>
 #include <netcdf>
 #include <boost/math/tools/roots.hpp>
+#include <GeographicLib/UTMUPS.hpp>
 
 using namespace std;
 using namespace netCDF;
-using namespace netCDF::exceptions;
+using namespace GeographicLib;
 
 typedef complex<double> dcomp;
 const std::complex<double> i(0, 1.0);
@@ -337,7 +339,7 @@ double get_t_segments(double east0, double north0, double east1, double north1, 
 int main(){
 	
 	// Read phase delay time observations
-	NcFile dtpFile("/home/bweise/bmw/MATLAB/matgsdf-master/dt_usarray_utm.nc", NcFile::read);
+	NcFile dtpFile("/home/bweise/bmw/MATLAB/matgsdf-master/dt_usarray_win_utm.nc", NcFile::read);
 	NcDim nperiodsIn = dtpFile.getDim("NumberOfPeriods");
 	NcDim nstatsIn = dtpFile.getDim("NumberOfStations");
 	NcDim nsrcsIn = dtpFile.getDim("NumberOfRays");
@@ -380,6 +382,10 @@ int main(){
 	double *dummy_pointer = &dtp_dummy;
 	NcVarAtt dummy = dtpIn.getAtt("_FillValue");
 	dummy.getValues(dummy_pointer);
+	
+	string utmzone;
+	NcVarAtt utm = mpnIn.getAtt("UTMZone");
+	utm.getValues(utmzone);
 	
 	// Conversion of periods to angular frequencies
 	std::vector<double> w;
