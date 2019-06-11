@@ -1,8 +1,9 @@
 /* 1Dvs2vph
- * Berechnet aus einem 1D Vs,Vp,Dichte-Modell die Phasengeschwindigkeit
- * zu gegebenen Perioden.
- * Verwendet boost, netcdf und geographic Bibliotheken.
- * Quellen: Haskell (1953), Dunkin (1965), Wathelet (2005),
+ * Calculates the phase delay times between stations for given
+ * earthquakes via computation of phase velocity maps (dispersion
+ * curves) from a density, vp & vs model.
+ * Uses boost, netcdf ans geographiclib libraries.
+ * Sources: Haskell (1953), Dunkin (1965), Wathelet (2005),
  * Cercato (2007)
  */
 
@@ -15,7 +16,11 @@
 #include <fstream>
 #include <netcdf>
 #include <boost/math/tools/roots.hpp>
-#include <GeographicLib/UTMUPS.hpp>
+#include <GeographicLib/TransverseMercatorExact.hpp>
+#include <GeographicLib/Geodesic.hpp>
+#include <GeographicLib/GeodesicLine.hpp>
+#include <GeographicLib/Rhumb.hpp>
+#include <GeographicLib/Constants.hpp>
 
 using namespace std;
 using namespace netCDF;
@@ -26,6 +31,7 @@ const std::complex<double> i(0, 1.0);
 
 bool verbose = 0; // set to 1 for more output
 double tolerance = 0.01; // Tolerance for phase velocity [m/s]
+double length_tolerance = 1.0; // Tolerance for grat circle vs loxodrome length [m]
 double mode_skip_it = 10.0;	// Number of additional iterations to check for mode skipping & factor to increase precision
 
 // function of root of rayleigh velocity
@@ -296,8 +302,90 @@ struct TerminationCondition{
 	}
 };
 
+std::vector<vector<double>> get_gc_segments(double east0, double north0, double east1, double north1, double lon_centr) {
+	// Approximates great circle path with loxodrome segments.
+	double false_east = 500000.0; // false eating for utm coordinates
+	
+	// Set up of projections
+	TransverseMercatorExact proj(Constants::WGS84_a(), Constants::WGS84_f(), Constants::UTM_k0());
+	Geodesic geod(Constants::WGS84_a(), Constants::WGS84_f());
+	Rhumb rhumb(Constants::WGS84_a(), Constants::WGS84_f());
+	
+	// Geographic coordinates for start & end point
+	double lon0, lat0, lon1, lat1;
+	proj.Reverse(lon_centr, east0-false_east, north0, lat0, lon0);
+	proj.Reverse(lon_centr, east1-false_east, north1, lat1, lon1);
+	std::vector<double> lon;
+	std::vector<double> lat;
+	std::vector<double> easting;
+	std::vector<double> northing;
+	lon.push_back(lon0);
+	lon.push_back(lon1);
+	lat.push_back(lat0);
+	lat.push_back(lat1);
+	easting.push_back(east0);
+	easting.push_back(east1);
+	northing.push_back(north0);
+	northing.push_back(north1);
+	
+	// Great circle between start & end point
+	const GeographicLib::GeodesicLine line = geod.InverseLine(lat[0], lon[0], lat[1], lon[1]);
+	
+	// Loxodrome distance between start & end point
+	double azi_tmp, dist_lox;
+	rhumb.Inverse(lat[0], lon[0], lat[1], lon[1], dist_lox, azi_tmp);
+	
+	// start with two points, check if distance difference is already smaller than tolerance
+	int npts = 2;
+	while(dist_lox-line.Distance() > length_tolerance) {
+		// In each iteration keep only the starting point
+		lon.erase(lon.begin()+1, lon.end());
+		lat.erase(lat.begin()+1, lat.end());
+		easting.erase(easting.begin()+1, easting.end());
+		northing.erase(northing.begin()+1, northing.end());
+		
+		// calculate segment length
+		double segment_length = line.Distance()/(npts+1);
+		for(int pt = 1; pt <= npts; pt++) {
+			// calculate point along great circle
+			double lon_tmp, lat_tmp;
+			line.Position(pt * segment_length, lat_tmp, lon_tmp);
+			lat.push_back(lat_tmp);
+			lon.push_back(lon_tmp);
+			
+			// transform to utm
+			double x, y;
+			proj.Forward(lon_centr, lat[pt], lon[pt], x, y);
+			easting.push_back(x+false_east);
+			northing.push_back(y);
+		}
+		// add end point to vectors
+		lon.push_back(lon1);
+		lat.push_back(lat1);
+		easting.push_back(east1);
+		northing.push_back(north1);
+		
+		//caculate loxodrome distance
+		dist_lox = 0.0;
+		double dist_tmp;
+		for(int segment = 0; segment<easting.size()-1; segment++){
+			rhumb.Inverse(lat[segment], lon[segment], lat[segment + 1], lon[segment + 1], dist_tmp, azi_tmp);
+			dist_lox = dist_lox + dist_tmp;
+		}
+		
+		// increase umber of points/segments
+		npts = npts * 2;
+	}
+	
+	// write eastings/northings to pts vector
+	std::vector<vector<double>> pts;
+	pts.push_back(easting);
+	pts.push_back(northing);
+	return pts;
+}
+
 double get_t_segments(double east0, double north0, double east1, double north1, std::vector<double> origin, double deast, double dnorth, std::vector<double> c, int ncells_north, int freq, int nperiods){
-	 
+	 // Computes relative phase delay for a station pair and a given earthquake
 	if(east1 < east0){
 		double tmp = east0;
 		east0 = east1;
@@ -339,7 +427,7 @@ double get_t_segments(double east0, double north0, double east1, double north1, 
 int main(){
 	
 	// Read phase delay time observations
-	NcFile dtpFile("/home/bweise/bmw/MATLAB/matgsdf-master/dt_usarray_win_utm.nc", NcFile::read);
+	NcFile dtpFile("./dt_usarray_win_utm.nc", NcFile::read);
 	NcDim nperiodsIn = dtpFile.getDim("NumberOfPeriods");
 	NcDim nstatsIn = dtpFile.getDim("NumberOfStations");
 	NcDim nsrcsIn = dtpFile.getDim("NumberOfRays");
@@ -383,9 +471,10 @@ int main(){
 	NcVarAtt dummy = dtpIn.getAtt("_FillValue");
 	dummy.getValues(dummy_pointer);
 	
-	string utmzone;
-	NcVarAtt utm = mpnIn.getAtt("UTMZone");
-	utm.getValues(utmzone);
+	double lon_centr;
+	double *lon_centr_pnt = &lon_centr;
+	NcVarAtt lonc = mpnIn.getAtt("Central_meridian");
+	lonc.getValues(lon_centr_pnt);
 	
 	// Conversion of periods to angular frequencies
 	std::vector<double> w;
@@ -396,9 +485,9 @@ int main(){
 	}
 	
 	// Read density, vs, vp from nc file
-	NcFile densFile("/home/bweise/bmw/WINTERC/dens_na_neu_utm.nc", NcFile::read);
-	NcFile vpFile("/home/bweise/bmw/WINTERC/vp_na_neu_utm.nc", NcFile::read);
-	NcFile vsFile("/home/bweise/bmw/WINTERC/vs_na_neu_utm.nc", NcFile::read);
+	NcFile densFile("./dens_na_neu_utm.nc", NcFile::read);
+	NcFile vpFile("./vp_na_neu_utm.nc", NcFile::read);
+	NcFile vsFile("./vs_na_neu_utm.nc", NcFile::read);
 	
 	// Get dimensions of model
 	NcDim nxIn=densFile.getDim("Northing");
@@ -607,19 +696,24 @@ int main(){
 	
 	// loop over all rays, computes phase delays
 	for (int src=0; src<nsrcs; src++){
-		//std::vector< std::pair <double,double> > segments;
-		//segments = get_segments(TO BE WRITTEN);
+		std::vector<vector<double>> segments;
+		segments = get_gc_segments(mpe[src_rcvr_cmb[src]], mpn[src_rcvr_cmb[src]], mpe[src_rcvr_cmb[src+nsrcs]], mpn[src_rcvr_cmb[src+nsrcs]], lon_centr);
+		std::vector<double> seg_east = segments[0];
+		std::vector<double> seg_north = segments[1];
 		for (int freq=0; freq<nperiods; freq++){
-			
 			if (dtp[src + (freq*nsrcs)]==dtp_dummy){
 				// if there is only a dummy value we can skip this period
 				delayfile << "\n" << eventx[event_stat_cmb[src]] << "\t" << eventy[event_stat_cmb[src]] << "\t" << event_stat_cmb[src] << "\t" << mpe[src_rcvr_cmb[src]] << "\t" << mpn[src_rcvr_cmb[src]] << "\t" << mpe[src_rcvr_cmb[src+nsrcs]] << "\t" << mpn[src_rcvr_cmb[src+nsrcs]] << "\t" << src_rcvr_cmb[src] << "\t" << src_rcvr_cmb[src+nsrcs] << "\t" << (2.0*M_PI)/w[freq] << "\t" << 0.0;
 				continue;
 			}
 			else {
-				// LOOP OVER SEGMENTS HERE!!
-				double time_segment = get_t_segments(mpe[src_rcvr_cmb[src]], mpn[src_rcvr_cmb[src]], mpe[src_rcvr_cmb[src+nsrcs]], mpn[src_rcvr_cmb[src+nsrcs]], model_origin, model_cell_east, model_cell_north, dispersion, NX, freq, nperiods);
-				delayfile << "\n" << eventx[event_stat_cmb[src]] << "\t" << eventy[event_stat_cmb[src]] << "\t" << event_stat_cmb[src] << "\t" << mpe[src_rcvr_cmb[src]] << "\t" << mpn[src_rcvr_cmb[src]] << "\t" << mpe[src_rcvr_cmb[src+nsrcs]] << "\t" << mpn[src_rcvr_cmb[src+nsrcs]] << "\t" << src_rcvr_cmb[src] << "\t" << src_rcvr_cmb[src+nsrcs] << "\t" << (2.0*M_PI)/w[freq] << "\t" << time_segment;
+				// loop over segments
+				double time_total = 0;
+				for(int seg=0; seg<seg_east.size()-1; seg++){
+					double time_segment = get_t_segments(seg_east[seg], seg_north[seg], seg_east[seg+1], seg_north[seg+1], model_origin, model_cell_east, model_cell_north, dispersion, NX, freq, nperiods);
+					time_total = time_total + time_segment;
+				}
+				delayfile << "\n" << eventx[event_stat_cmb[src]] << "\t" << eventy[event_stat_cmb[src]] << "\t" << event_stat_cmb[src] << "\t" << mpe[src_rcvr_cmb[src]] << "\t" << mpn[src_rcvr_cmb[src]] << "\t" << mpe[src_rcvr_cmb[src+nsrcs]] << "\t" << mpn[src_rcvr_cmb[src+nsrcs]] << "\t" << src_rcvr_cmb[src] << "\t" << src_rcvr_cmb[src+nsrcs] << "\t" << (2.0*M_PI)/w[freq] << "\t" << time_total;
 			}
 				
 		} // end loop frequencies
