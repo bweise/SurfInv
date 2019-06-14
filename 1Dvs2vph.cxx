@@ -395,7 +395,6 @@ double get_t_segments(double east0, double north0, double east1, double north1, 
 	TransverseMercatorExact proj(Constants::WGS84_a(), Constants::WGS84_f(), Constants::UTM_k0());
 	double event_lat, event_lon;
 	proj.Reverse(lon_centr, event_e-false_east, event_n, event_lat, event_lon);
-	//cout << "Event coords: " << event_lon << "\t" << event_lat << "\n";
 	
 	// Path segment is interpreted as line segment (not loxodrome)
 	// because we don't care about its length (only orientation).
@@ -408,16 +407,8 @@ double get_t_segments(double east0, double north0, double east1, double north1, 
 	double ncell1 = floor((north1-origin[1])/dnorth);
 	double time = 0.0;
 	double mid_e, mid_n, mid_lon, mid_lat, s12, az1, az2, se, sn, dist_segment_e, dist_segment_n;
-	/*cout << "deast: " << deast << " dnorth: " << dnorth << "\n";
-	cout << "Ursprung: " << origin[0] << "/" << origin[1] << "\n";
-	cout << "P1: " << east0 << "/" << north0 << "\n";
-	cout << "P2: " << east1 << "/" << north1 << "\n";
-	cout << "cell: " << ecell0 << "/" << ncell0 << "\n";
-	cout << "Ziel: " << ecell1 << "/" << ncell1 << "\n";
-	cout << "Gerade: " << slope << "*x+" << intercept << "\n";*/
 	
 	while((abs(ecell0 - ecell1) > 0.0) | (abs(ncell0 - ncell1) > 0.0)) {
-		segfile << "\n" << east0 << "/" << north0 << "\t";
 		double north_intercept, east_intercept, estep, nstep;
 		if(east0 <= east1){
 			east_intercept = origin[0]+(ecell0+1)*deast;
@@ -425,12 +416,10 @@ double get_t_segments(double east0, double north0, double east1, double north1, 
 			if(slope < 0){
 				north_intercept = ((origin[1]+ncell0*dnorth)-intercept)/slope;
 				nstep = -1.0;
-				//cout << "Next North bound: " << (origin[1]+ncell0*dnorth) << "\n";
 			}
 			else {
 				north_intercept = ((origin[1]+(ncell0+1)*dnorth)-intercept)/slope;
 				nstep = 1.0;
-				//cout << "Next North bound: " << (origin[1]+(ncell0+1)*dnorth) << "\n";
 			}
 		}
 		else{
@@ -439,18 +428,14 @@ double get_t_segments(double east0, double north0, double east1, double north1, 
 			if(slope < 0){
 				north_intercept = ((origin[1]+(ncell0+1)*dnorth)-intercept)/slope;
 				nstep = 1.0;
-				//cout << "Next North bound: " << (origin[1]+(ncell0+1)*dnorth) << "\n";
 			}
 			else {
 				north_intercept = ((origin[1]+ncell0*dnorth)-intercept)/slope;
 				nstep = -1.0;
-				//cout << "Next North bound: " << (origin[1]+ncell0*dnorth) << "\n";
 			}
 		}
 		double east_dist = abs(east0-east_intercept);
 		double north_dist = abs(east0 - north_intercept);
-		/*cout << "East inter: " << east_intercept << " North inter: " << north_intercept << "\n";
-		cout << "East dist: " << east_dist << " North dist: " << north_dist << "\n";*/
 		if(north_dist < east_dist){
 			dist_segment_e = north_intercept-east0;
 			dist_segment_n = (slope*north_intercept + intercept) - north0;
@@ -469,40 +454,28 @@ double get_t_segments(double east0, double north0, double east1, double north1, 
 			north0 = slope*east_intercept+intercept;
 			ecell0 = ecell0 + estep;
 		}
-		/*cout << "seg length e: " << dist_segment_e << " seg length n: " << dist_segment_n << "\n";
-		cout << "mid e: " << mid_e << " mid n: " << mid_n << "\n";
-		cout << "P1: " << east0 << "/" << north0 << "\n";*/
 		proj.Reverse(lon_centr, mid_e-false_east, mid_n, mid_lat, mid_lon);
 		geod.Inverse(event_lat, event_lon, mid_lat, mid_lon, s12, az1, az2);
-		//cout << "Azimuth: " << az2 << "\n";
 		se = cos((90.0-az2)*M_PI/180.0)*(1.0/c[ecell0 * ncells_north * nperiods + ncell0 * nperiods + freq]);
 		sn = sin((90.0-az2)*M_PI/180.0)*(1.0/c[ecell0 * ncells_north * nperiods + ncell0 * nperiods + freq]);
 		time = time + se * dist_segment_e + sn * dist_segment_n;
-		/*cout << "time: " << time << "\n";
-		cout << "cell: " << ecell0 << "/" << ncell0 << "\n";
-		cin.get();*/
 	}
 	dist_segment_e = east1-east0;
 	dist_segment_n = north1-north0;
 	mid_e = east0 + dist_segment_e/2.0;
 	mid_n = north0 + dist_segment_n/2.0;
-	/*cout << "dist e: " << dist_segment_e << " dist n: " << dist_segment_n << "\n";
-	cout << "mid e: " << mid_e << " mid n: " << mid_n << "\n";*/
 	proj.Reverse(lon_centr, mid_e-false_east, mid_n, mid_lat, mid_lon);
 	geod.Inverse(event_lat, event_lon, mid_lat, mid_lon, s12, az1, az2);
-	//cout << "Azimuth: " << az2 << "\n";
 	se = cos((90-az2)*M_PI/180)*(1/c[ecell1 * ncells_north * nperiods + ncell1 * nperiods + freq]);
 	sn = sin((90-az2)*M_PI/180)*(1/c[ecell1 * ncells_north * nperiods + ncell1 * nperiods + freq]);
 	time = time + se * dist_segment_e + sn * dist_segment_n;
-	/*cout << "time final: " << time << "\n";
-	cin.get();*/
 	return time;
 }
 
 int main(){
 	
 	// Read phase delay time observations
-	NcFile dtpFile("./dt_tst_utm.nc", NcFile::read);
+	NcFile dtpFile("./dt_usarray_win_utm.nc", NcFile::read);
 	NcDim nperiodsIn = dtpFile.getDim("NumberOfPeriods");
 	NcDim nstatsIn = dtpFile.getDim("NumberOfStations");
 	NcDim nsrcsIn = dtpFile.getDim("NumberOfRays");
@@ -778,17 +751,17 @@ int main(){
 		for (int freq=0; freq<nperiods; freq++){
 			if (dtp[src + (freq*nsrcs)]==dtp_dummy){
 				// if there is only a dummy value we can skip this period
-				delayfile << "\n" << eventx[event_stat_cmb[src]] << "\t" << eventy[event_stat_cmb[src]] << "\t" << event_stat_cmb[src] << "\t" << mpe[src_rcvr_cmb[src]] << "\t" << mpn[src_rcvr_cmb[src]] << "\t" << mpe[src_rcvr_cmb[src+nsrcs]] << "\t" << mpn[src_rcvr_cmb[src+nsrcs]] << "\t" << src_rcvr_cmb[src] << "\t" << src_rcvr_cmb[src+nsrcs] << "\t" << (2.0*M_PI)/w[freq] << "\t" << 0.0;
+				delayfile << "\n" << eventy[event_stat_cmb[src]] << "\t" << eventx[event_stat_cmb[src]] << "\t" << event_stat_cmb[src] << "\t" << mpe[src_rcvr_cmb[src]] << "\t" << mpn[src_rcvr_cmb[src]] << "\t" << mpe[src_rcvr_cmb[src+nsrcs]] << "\t" << mpn[src_rcvr_cmb[src+nsrcs]] << "\t" << src_rcvr_cmb[src] << "\t" << src_rcvr_cmb[src+nsrcs] << "\t" << (2.0*M_PI)/w[freq] << "\t" << 0.0;
 				continue;
 			}
 			else {
 				// loop over segments
 				double time_total = 0;
 				for(int seg=0; seg<seg_east.size()-1; seg++){
-					double time_segment = get_t_segments(seg_east[seg], seg_north[seg], seg_east[seg+1], seg_north[seg+1], eventx[event_stat_cmb[src]], eventy[event_stat_cmb[src]], lon_centr, model_origin, model_cell_east, model_cell_north, dispersion, NX, freq, nperiods);
+					double time_segment = get_t_segments(seg_east[seg], seg_north[seg], seg_east[seg+1], seg_north[seg+1], eventy[event_stat_cmb[src]], eventx[event_stat_cmb[src]], lon_centr, model_origin, model_cell_east, model_cell_north, dispersion, NX, freq, nperiods);
 					time_total = time_total + time_segment;
 				}
-				delayfile << "\n" << eventx[event_stat_cmb[src]] << "\t" << eventy[event_stat_cmb[src]] << "\t" << event_stat_cmb[src] << "\t" << mpe[src_rcvr_cmb[src]] << "\t" << mpn[src_rcvr_cmb[src]] << "\t" << mpe[src_rcvr_cmb[src+nsrcs]] << "\t" << mpn[src_rcvr_cmb[src+nsrcs]] << "\t" << src_rcvr_cmb[src] << "\t" << src_rcvr_cmb[src+nsrcs] << "\t" << (2.0*M_PI)/w[freq] << "\t" << time_total;
+				delayfile << "\n" << eventy[event_stat_cmb[src]] << "\t" << eventx[event_stat_cmb[src]] << "\t" << event_stat_cmb[src] << "\t" << mpe[src_rcvr_cmb[src]] << "\t" << mpn[src_rcvr_cmb[src]] << "\t" << mpe[src_rcvr_cmb[src+nsrcs]] << "\t" << mpn[src_rcvr_cmb[src+nsrcs]] << "\t" << src_rcvr_cmb[src] << "\t" << src_rcvr_cmb[src+nsrcs] << "\t" << (2.0*M_PI)/w[freq] << "\t" << time_total;
 			}
 				
 		} // end loop frequencies
