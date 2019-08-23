@@ -32,7 +32,7 @@ const std::complex<double> i(0, 1.0);
 bool verbose = 0; // set to 1 for more output
 double tolerance = 0.01; // Tolerance for phase velocity [m/s]
 double length_tolerance = 1.0; // Tolerance for grat circle vs loxodrome length [m]
-double mode_skip_it = 10.0;	// Number of additional iterations to check for mode skipping & factor to increase precision
+double mode_skip_it = 2.0;	// Number of additional iterations to check for mode skipping & factor to increase precision
 
 // function of root of rayleigh velocity
 double compute_fvr(double vp, double vs, double vr){
@@ -855,9 +855,6 @@ int main(){
 	
 	//Vectors to store gradients, dispersion curves
 	std::vector<double> dcdrho, dcdvs, dcdvp, dispersion;
-						
-	// Sort vector of periods
-	std::sort(periods.begin(), periods.end());
 		
 	for (int estep = 0; estep<NY; estep++){
 		for (int nstep = 0; nstep<NX; nstep++){
@@ -917,7 +914,7 @@ int main(){
 					cout << "Schermodul unterste Schicht: " << mu << "\n";
 				
 				// Compute initial R1212 polarization for large period (2000 s)	below fundamental mode
-				double R1212 = compute_R1212(2.0*M_PI/2000.0, c_lim[0], vp, vs, mu, depth, dens, nlay, 0, -999);
+				double R1212 = compute_R1212(w[nperiods]/10.0, c_lim[0], vp, vs, mu, depth, dens, nlay, 0, -999);
 				bool pol0 = signbit(R1212);
 				
 				if(verbose==1)
@@ -1071,8 +1068,7 @@ int main(){
 						gradfile << "\n" << tgradvs[cell*nlay+grad] << "\t" << tgradvp[cell*nlay+grad] << "\t" << tgradrho[cell*nlay+grad];
 					}
 				}
-			}
-				
+			}	
 		} // end loop frequencies
 	} // end loop rays
 	
