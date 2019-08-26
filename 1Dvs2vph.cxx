@@ -690,8 +690,8 @@ std::vector<vector<double>> get_gc_segments(double east0, double north0, double 
 		//ncells.push_back(ncell0);
 		proj.Reverse(lon_centr, mid_e-false_east, mid_n, mid_lat, mid_lon);
 		geod.Inverse(event_lat, event_lon, mid_lat, mid_lon, s12, az1, az2);
-		se = cos((90.0-az2)*M_PI/180.0)*(1.0/c[ecell0 * ncells_north * nperiods + ncell0 * nperiods + freq]);
-		sn = sin((90.0-az2)*M_PI/180.0)*(1.0/c[ecell0 * ncells_north * nperiods + ncell0 * nperiods + freq]);
+		se = cos((90.0-az2)*M_PI/180.0)*(1.0/c[ecell0 * ncells_north + ncell0]);
+		sn = sin((90.0-az2)*M_PI/180.0)*(1.0/c[ecell0 * ncells_north + ncell0]);
 		time = time + (se * dist_segment_e + sn * dist_segment_n)*(-1.0);
 		/*for(int n=0;n<nlay;n++){
 			double tmp = dcdvs[ecell0 * ncells_north * nperiods * nlay + ncell0 * nperiods * nlay + freq*nlay + n];
@@ -716,8 +716,8 @@ std::vector<vector<double>> get_gc_segments(double east0, double north0, double 
 	mid_n = north0 + dist_segment_n/2.0;
 	proj.Reverse(lon_centr, mid_e-false_east, mid_n, mid_lat, mid_lon);
 	geod.Inverse(event_lat, event_lon, mid_lat, mid_lon, s12, az1, az2);
-	se = cos((90-az2)*M_PI/180)*(1/c[ecell1 * ncells_north * nperiods + ncell1 * nperiods + freq]);
-	sn = sin((90-az2)*M_PI/180)*(1/c[ecell1 * ncells_north * nperiods + ncell1 * nperiods + freq]);
+	se = cos((90-az2)*M_PI/180)*(1/c[ecell1 * ncells_north + ncell1]);
+	sn = sin((90-az2)*M_PI/180)*(1/c[ecell1 * ncells_north + ncell1]);
 	time = time + (se * dist_segment_e + sn * dist_segment_n)*(-1.0);
 	/*for(int n=0;n<nlay;n++){
 		double tmp = dcdvs[ecell0 * ncells_north * nperiods * nlay + ncell0 * nperiods * nlay + freq*nlay + n];
@@ -850,82 +850,84 @@ int main(){
 	double model_cell_north = north[1] - north[0];
 	std::vector<double> model_origin = {east[0], north[0]};
 	
-	// Open output file, write header line
+	// Open output files, write header lines
 	ofstream resultfile;
 	resultfile.open ("dispersion.out");
 	resultfile << "# Easting [m] \t Northing [m] \t Period [s] \t Phase velocity [m/s] \t Difference [m/s] \t No. of iterations";
 	
-	//Vectors to store gradients, dispersion curves
-	std::vector<double> dcdrho, dcdvs, dcdvp, dispersion;
-		
-	for (int estep = 0; estep<NY; estep++){
-		for (int nstep = 0; nstep<NX; nstep++){
-			std::vector<double> dens;
-			std::vector<double> vs;
-			std::vector<double> vp;	
-			bool lvz=0;
-			for (int n=0; n<nlay; n++){
-				// sort velocities, densities into 1D models 
-				dens.push_back(dens_all[n+nlay*estep+NY*nlay*nstep]);
-				vs.push_back(vs_all[n+nlay*estep+NY*nlay*nstep]);
-				// check if there's a low velocity zone
-				if (n>0 & vs[n]<vs[n-1])
-					lvz=1;
-				//cout << lvz << "\n";
-				vp.push_back(vp_all[n+nlay*estep+NY*nlay*nstep]);
-			}
+	ofstream delayfile;
+	delayfile.open ("delays.out");
+	delayfile << "#Easting_epi [m] \t Northing_epi [m] \t Event_num \t Easting_stat1 [m] \t Northing_stat1 [m] \t Easting_stat2 [m] \t Northing_stat2 [m] \t stat1_num \t stat2_num \t Period [s] \t Phase delay [s]";
+	
+	for(int freq=0; freq<nperiods; freq++){
+		//Vectors to store gradients, dispersion curves
+		std::vector<double> /*dcdrho, dcdvs, dcdvp,*/ dispersion;	
+		for (int estep = 0; estep<NY; estep++){
+			for (int nstep = 0; nstep<NX; nstep++){
+				std::vector<double> dens;
+				std::vector<double> vs;
+				std::vector<double> vp;	
+				bool lvz=0;
+				for (int n=0; n<nlay; n++){
+					// sort velocities, densities into 1D models 
+					dens.push_back(dens_all[n+nlay*estep+NY*nlay*nstep]);
+					vs.push_back(vs_all[n+nlay*estep+NY*nlay*nstep]);
+					// check if there's a low velocity zone
+					if (n>0 & vs[n]<vs[n-1])
+						lvz=1;
+					//cout << lvz << "\n";
+					vp.push_back(vp_all[n+nlay*estep+NY*nlay*nstep]);
+				}
 			
-			if (vs[0]<=0){
-				// This still needs some work. Computation of dispersion curves does not work if top layer has vs=0
-				for(int freq=0; freq<nperiods; freq++){
+				if (vs[0]<=0){
+					// This still needs some work. Computation of dispersion curves does not work if top layer has vs=0
 					dispersion.push_back(0.0);
 					resultfile << "\n" << east[estep] << "\t" << north[nstep] << "\t" << (2.0*M_PI)/w[freq] << "\t" << 0.0 << "\t" << 0.0 << "\t" << 0.0;
+					continue;
 				}
-				continue;
-			}
-			else{				
-				// Calculation of velocity limits 
-				std::vector<double> c_lim={0,0};
-				double vsmin = *std::min_element(vs.begin(),vs.end());
-				double vsmax = *std::max_element(vs.begin(),vs.end());
-				double vpmin = *std::min_element(vp.begin(),vp.end());
-				double vpmax = *std::max_element(vp.begin(),vp.end());
-				c_lim[0] = newton_vr(vpmin, vsmin)/1.05;
-				c_lim[1] = newton_vr(vpmax, vsmax)*1.05;
+				else{				
+					// Calculation of velocity limits 
+					std::vector<double> c_lim={0,0};
+					double vsmin = *std::min_element(vs.begin(),vs.end());
+					double vsmax = *std::max_element(vs.begin(),vs.end());
+					double vpmin = *std::min_element(vp.begin(),vp.end());
+					double vpmax = *std::max_element(vp.begin(),vp.end());
+					c_lim[0] = newton_vr(vpmin, vsmin)/1.05;
+					c_lim[1] = newton_vr(vpmax, vsmax)*1.05;
 				
-				// step ratio for root bracketing
-				double stepratio = (vsmin - c_lim[0])/(2.0*vsmin);	
+					// step ratio for root bracketing
+					double stepratio = (vsmin - c_lim[0])/(2.0*vsmin);	
 	
-				if(verbose==1){
-					cout << "cmin: " << c_lim[0] << "\t cmax: " << c_lim[1] << "\n";
-					cout << "Anzahl Schichten: " << nlay << "\n";
-					cout << "Easting: " << east[estep] << "\t Northing: " << north[nstep] << "\n";
+					if(verbose==1){
+						cout << "cmin: " << c_lim[0] << "\t cmax: " << c_lim[1] << "\n";
+						cout << "Anzahl Schichten: " << nlay << "\n";
+						cout << "Easting: " << east[estep] << "\t Northing: " << north[nstep] << "\n";
 	
-					for(int n=0; n<nlay-1; n++)
-						cout << "Schicht " << n+1 << " von " << depth[n] << " bis "
-							<< depth[n+1] << " m mit vs = " << vs[n] << " m/s, vp = "
-							<< vp[n] << " m/s und " << dens[n] << " kg/m3 Dichte.\n";
-					cout << "Letzte Schicht ab " << depth[nlay-1] << " m: vs = "
-						<< vs[nlay-1] << " m/s, vp = " << vp[nlay-1]
-						<< " m/s, Dichte = " << dens[nlay-1] << " kg/m3.\n";
-				}
+						for(int n=0; n<nlay-1; n++)
+							cout << "Schicht " << n+1 << " von " << depth[n] << " bis "
+								<< depth[n+1] << " m mit vs = " << vs[n] << " m/s, vp = "
+								<< vp[n] << " m/s und " << dens[n] << " kg/m3 Dichte.\n";
+						cout << "Letzte Schicht ab " << depth[nlay-1] << " m: vs = "
+							<< vs[nlay-1] << " m/s, vp = " << vp[nlay-1]
+							<< " m/s, Dichte = " << dens[nlay-1] << " kg/m3.\n";
+					}
 				
-				// Shear modulus bottom layer
-				double mu = pow(vs[nlay-1],2)*dens[nlay-1];
-				if (verbose==1)
-					cout << "Schermodul unterste Schicht: " << mu << "\n";
+					// Shear modulus bottom layer
+					double mu = pow(vs[nlay-1],2)*dens[nlay-1];
+					if (verbose==1)
+						cout << "Schermodul unterste Schicht: " << mu << "\n";
 				
-				// Compute initial R1212 polarization for large period below fundamental mode
-				double R1212 = compute_R1212(w[nperiods]/10.0, c_lim[0], vp, vs, mu, depth, dens, nlay, 0, -999);
-				bool pol0 = signbit(R1212);
+					// Compute initial R1212 polarization for large period below fundamental mode
+					double R1212 = compute_R1212(w[nperiods]/10.0, c_lim[0], vp, vs, mu, depth, dens, nlay, 0, -999);
+					bool pol0 = signbit(R1212);
 				
-				if(verbose==1)
-					cout << "Polarisation von R1212 für geringe Geschwindigkeit: " << pol0 << "\n";
+					if(verbose==1)
+						cout << "Polarisation von R1212 für geringe Geschwindigkeit: " << pol0 << "\n";
 				
-				double c_last=c_lim[0];	//
+					double c_last=c_lim[0];	//
 				
-				// Loop over all periods/frequencies
-				for(int freq=0; freq<nperiods; freq++){
+					// Loop over all periods/frequencies
+					//for(int freq=0; freq<nperiods; freq++){
 					double c0, c1 = c_last;	// stores brackets
 					bool pol1 = pol0;	// initial polarization of R1212
 					double precision = 1;
@@ -1012,32 +1014,28 @@ int main(){
 					}*/
 					
 					
-				} // end loop over frequencies
-			} 
-		} // end of loop over northing
-	} // end of loop over easting
+				//} // end loop over frequencies
+				} 
+			} // end of loop over northing
+		} // end of loop over easting
 	
-	// close file
-	resultfile << "\n";
-	resultfile.close();
+		// close file
+		resultfile << "\n";
+		resultfile.close();
 	
-	ofstream delayfile;
-	delayfile.open ("delays.out");
-	delayfile << "#Easting_epi [m] \t Northing_epi [m] \t Event_num \t Easting_stat1 [m] \t Northing_stat1 [m] \t Easting_stat2 [m] \t Northing_stat2 [m] \t stat1_num \t stat2_num \t Period [s] \t Phase delay [s]";
+		/*ofstream gradfile;
+		gradfile.open ("gradients.out");
+		gradfile << "#Source receiver comb. \t period[s] \t ecell \t ncell \n #gradvs \t gradvp \t graddens";
+		*/
 	
-	/*ofstream gradfile;
-	gradfile.open ("gradients.out");
-	gradfile << "#Source receiver comb. \t period[s] \t ecell \t ncell \n #gradvs \t gradvp \t graddens";
-	*/
-	
-	// loop over all rays, computes phase delays
-	for (int src=0; src<nsrcs; src++){
-		//cout << "src: \t" << src << "\n";
-		std::vector<vector<double>> segments;
-		segments = get_gc_segments(mpe[src_rcvr_cmb[src]], mpn[src_rcvr_cmb[src]], mpe[src_rcvr_cmb[src+nsrcs]], mpn[src_rcvr_cmb[src+nsrcs]], lon_centr);
-		std::vector<double> seg_east = segments[0];
-		std::vector<double> seg_north = segments[1];
-		for (int freq=0; freq<nperiods; freq++){
+		// loop over all rays, computes phase delays
+		for (int src=0; src<nsrcs; src++){
+			//cout << "src: \t" << src << "\n";
+			std::vector<vector<double>> segments;
+			segments = get_gc_segments(mpe[src_rcvr_cmb[src]], mpn[src_rcvr_cmb[src]], mpe[src_rcvr_cmb[src+nsrcs]], mpn[src_rcvr_cmb[src+nsrcs]], lon_centr);
+			std::vector<double> seg_east = segments[0];
+			std::vector<double> seg_north = segments[1];
+			//for (int freq=0; freq<nperiods; freq++){
 			//cout << "freq: \t" << freq << "\n";
 			for(int event=0; event<nevents_per_src; event++){
 				//cout << "event: \t" << event << "\n";
@@ -1078,8 +1076,8 @@ int main(){
 					}*/
 				}
 			}	
-		} // end loop frequencies
-	} // end loop rays
+		} // end loop rays
+	} // end loop frequencies
 	
 	delayfile << "\n";
 	delayfile.close();
