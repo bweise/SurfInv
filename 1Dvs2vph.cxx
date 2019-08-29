@@ -13,6 +13,7 @@
 #include <cmath>
 #include <tuple>
 #include <algorithm>
+#include <functional>
 #include <fstream>
 #include <netcdf>
 #include <boost/math/tools/roots.hpp>
@@ -29,6 +30,7 @@ using namespace GeographicLib;
 typedef complex<double> dcomp;
 const std::complex<double> i(0, 1.0);
 
+bool calcgrads = 1; // set to 1 to calculate gradients.
 bool verbose = 0; // set to 1 for more output
 double tolerance = 0.01; // Tolerance for phase velocity [m/s]
 double length_tolerance = 1.0; // Tolerance for grat circle vs loxodrome length [m]
@@ -108,13 +110,6 @@ std::tuple<dcomp,dcomp,double,double,double,double,double,dcomp,dcomp,double,dou
 	dcomp kvnorm = kv/k;
 	double l = 2.0*pow(k,2)-pow(w/vs,2);
 	
-	/*if (verbose==1){
-		cout << "hv: " << hv << " kv: " << kv << "\n"
-			<< "hvnorm: " << hvnorm << " kvnorm: " << kvnorm << "\n"
-			<< "SH: " << SH << " SK: " << SK << " CH: " << CH << " CK: " << CK << "\n"
-			<< "gamma: " << gam << " l: " << l << "\n\n";
-	}*/
-	
 	return std::make_tuple(hv, kv, SH, CH, SK, CK, gam, hvnorm, kvnorm, l, mh, mk);
 }
 
@@ -180,14 +175,6 @@ std::tuple<double,double,double,double,double> compute_T(double w, double c, dou
 	double T1224 = std::real(mu*hv*pow(kv,2)*(2.0*pow(k,2)-l)*fact);
 	double T1234 = std::real(hv*kv*(pow(k,2)-hv*kv)*fact);
 	
-	/*if (verbose==1) {
-		cout << "factor: " << fact << "\n"
-			<< "T1212: " << T1212 << "\t"
-			<< "T1213: " << T1213 << "\t"
-			<< "iT1214: " << iT1214 << "\t"
-			<< "T1224: " << T1224 << "\t"
-			<< "T1234: " << T1234 << "\n\n";
-	}*/
 	return std::make_tuple(T1212,T1213,iT1214,T1224,T1234);
 }
 
@@ -274,15 +261,6 @@ std::tuple<double,double,double,double,double,double,double,double,double,double
 	double G2412 = std::real(dens*w*c*(pow(1.0 - gam,2)*CH*SK - pow(gam,2)*SH*CK*pow(hvnorm,2)));
 	double G2413 = std::real((-1.0)*pow(hvnorm,2)*SH*SK);
 	double G3412 = std::real((-1.0)*pow(dens,2)*pow(w,2)*pow(c,2)*(2.0*pow(gam,2)*pow(1.0 - gam,2)*(1.0 - CH*CK) + (pow(1.0 - gam,4)+pow(gam,4)*pow(hvnorm,2)*pow(kvnorm,2))*SH*SK));
-	
-	/*if (verbose==1){
-		cout << "G-Komponenten:\n"
-			<< "G1212: " << G1212 << " G1213: " << G1213 << " iG1214: " << iG1214 << " G1224: " << G1224 << " G1234: " << G1234 << "\n"
-			<< "G1312: " << G1312 << " G1313: " << G1313 << " iG1314: " << iG1314 << " G1324: " << G1324 << "\n"
-			<< "iG1412: " << iG1412 << " iG1413: " << iG1413 << " G1414: " << G1414 << "\n"
-			<< "G2412: " << G2412 << " G2413: " << G2413 << "\n"
-			<< "G3412: " << G3412 << "\n\n";
-	}*/
 		
 	return std::make_tuple(G1212,G1213,iG1214,G1224,G1234,G1312,G1313,iG1314,G1324,iG1412,iG1413,G1414,G2412,G2413,G3412);
 }
@@ -459,16 +437,7 @@ std::tuple<double,double,double,double,double> compute_R(double w, double c, dou
 			R1224 = maxR*R1224;
 			R1234 = maxR*R1234;
 		}
-	}
-	
-	/*if (verbose==1) {
-		cout << "R1212: " << R1212 << "\n"
-		<< "R1213: " << R1213 << "\n"
-		<< "iR1214: " << iR1214 << "\n"
-		<< "R1224: " << R1224 << "\n"
-		<< "R1234: " << R1234 << "\n\n";
-	}*/
-	
+	}	
 	return std::make_tuple(R1212,R1213,iR1214,R1224,R1234);
 }
 
@@ -476,10 +445,6 @@ double compute_R1212(double w, double c, std::vector<double> vp, std::vector<dou
 	// Recursive layer stacking from bottom to top to get R1212
 	std::tuple<double,double,double,double,double> R;
 	for(int n=nlay-1;n>=0;n--){
-		/*if (verbose==1){
-			cout << "Schicht: " << n+1 << "\n";
-			cout << "Geschwindigkeiten: " << vp[n] << "\t" << vs[n] << "\n";
-		}*/
 		if (n==nlay-1){
 			if(n==gradlay){
 				if(param==1)
@@ -488,14 +453,13 @@ double compute_R1212(double w, double c, std::vector<double> vp, std::vector<dou
 					R = compute_T_vp(w, c, vp[n], vs[n], mu);
 				else if(param==3)
 					R = compute_T_rho(w, c, vp[n], vs[n], mu);
-				}
-			else
+			}
+			else{
 				R = compute_T(w, c, vp[n], vs[n], mu);
+			}
 		}
 		else {
 			double dn = depth[n+1]-depth[n];
-			/*if (verbose==1)
-				cout << "Schichtdicke: " << dn << "m\n";*/
 			if(n==gradlay)
 				R = compute_R(w, c, vp[n], vs[n], dn, dens[n], R, param);
 			else
@@ -611,7 +575,7 @@ std::vector<vector<double>> get_gc_segments(double east0, double north0, double 
 	return pts;
 }
 
-/*std::vector<vector<double>>*/double get_t_segments(double east0, double north0, double east1, double north1, double event_e, double event_n, double lon_centr, std::vector<double> origin, double deast, double dnorth, std::vector<double> c, int ncells_north, int freq, int nperiods){//, std::vector<double> dcdvs, std::vector<double> dcdvp, std::vector<double> dcdrho, int nlay){
+std::vector<vector<double>> get_t_segments(double east0, double north0, double east1, double north1, double event_e, double event_n, double lon_centr, std::vector<double> origin, double deast, double dnorth, const std::vector<double> &c, int ncells_east, const std::vector<double> &dsdvs, const std::vector<double> &dsdvp, const std::vector<double> &dsdrho, int nlay){
 	// Computes relative phase delay for a station pair and a given earthquake
 	double false_east = 500000.0; // false eating for utm coordinates
 	origin[0] = origin[0] - deast;
@@ -632,13 +596,11 @@ std::vector<vector<double>> get_gc_segments(double east0, double north0, double 
 	double ncell0 = floor((north0-origin[1])/dnorth);
 	double ecell1 = floor((east1-origin[0])/deast);
 	double ncell1 = floor((north1-origin[1])/dnorth);
-	//std::vector<vector<double>> times_grads;
-	//std::vector<double> times;
+	std::vector<vector<double>> times_grads;
+	std::vector<double> times;
 	double time = 0.0;
-	double mid_e, mid_n, mid_lon, mid_lat, s12, az1, az2, se, sn, dist_segment_e, dist_segment_n;
-	//std::vector<double> ecells,ncells,densgrad, vsgrad, vpgrad;
-	//ecells.push_back(ecell0);
-	//ncells.push_back(ncell0);
+	double mid_e, mid_n, mid_lon, mid_lat, s12, az1, az2, se, sn, dist_segment_e, dist_segment_n, dsedvs, dsndvs, dsedvp, dsndvp, dsedrho, dsndrho;
+	std::vector<double> rhograd(dsdrho.size(),0.0), vsgrad(dsdrho.size(),0.0), vpgrad(dsdrho.size(),0.0);
 	
 	while((abs(ecell0 - ecell1) > 0.0) | (abs(ncell0 - ncell1) > 0.0)) {
 		double north_intercept, east_intercept, estep, nstep;
@@ -686,67 +648,62 @@ std::vector<vector<double>> get_gc_segments(double east0, double north0, double 
 			north0 = slope*east_intercept+intercept;
 			ecell0 = ecell0 + estep;
 		}
-		//ecells.push_back(ecell0);
-		//ncells.push_back(ncell0);
 		proj.Reverse(lon_centr, mid_e-false_east, mid_n, mid_lat, mid_lon);
 		geod.Inverse(event_lat, event_lon, mid_lat, mid_lon, s12, az1, az2);
-		se = cos((90.0-az2)*M_PI/180.0)*(1.0/c[ecell0 * ncells_north + ncell0]);
-		sn = sin((90.0-az2)*M_PI/180.0)*(1.0/c[ecell0 * ncells_north + ncell0]);
+		se = cos((90.0-az2)*M_PI/180.0)*(1.0/c[ncell0 * ncells_east + ecell0]);
+		sn = sin((90.0-az2)*M_PI/180.0)*(1.0/c[ncell0 * ncells_east + ecell0]);
 		time = time + (se * dist_segment_e + sn * dist_segment_n)*(-1.0);
-		/*for(int n=0;n<nlay;n++){
-			double tmp = dcdvs[ecell0 * ncells_north * nperiods * nlay + ncell0 * nperiods * nlay + freq*nlay + n];
-			tmp = sqrt(2)/tmp;
-			tmp = tmp*dist_segment_e+tmp*dist_segment_n;
-			vsgrad.push_back(tmp);
-			tmp = dcdvp[ecell0 * ncells_north * nperiods * nlay + ncell0 * nperiods * nlay + freq*nlay + n];
-			tmp = sqrt(2)/tmp;
-			tmp = tmp*dist_segment_e+tmp*dist_segment_n;
-			vpgrad.push_back(tmp);
-			tmp = dcdrho[ecell0 * ncells_north * nperiods * nlay + ncell0 * nperiods * nlay + freq*nlay + n];
-			tmp = sqrt(2)/tmp;
-			tmp = tmp*dist_segment_e+tmp*dist_segment_n;
-			densgrad.push_back(tmp);
-		}*/
+		
+		if(calcgrads==1){
+			for(int n=0;n<nlay;n++){
+				dsedvs = cos((90.0-az2)*M_PI/180.0)*dsdvs[ncell0 * ncells_east * nlay + ecell0 * nlay + n];
+				dsedvp = cos((90.0-az2)*M_PI/180.0)*dsdvp[ncell0 * ncells_east * nlay + ecell0 * nlay + n];
+				dsedrho = cos((90.0-az2)*M_PI/180.0)*dsdrho[ncell0 * ncells_east * nlay + ecell0 * nlay + n];
+				dsndvs = sin((90.0-az2)*M_PI/180.0)*dsdvs[ncell0 * ncells_east * nlay + ecell0 * nlay + n];
+				dsndvp = sin((90.0-az2)*M_PI/180.0)*dsdvp[ncell0 * ncells_east * nlay + ecell0 * nlay + n];
+				dsndrho = sin((90.0-az2)*M_PI/180.0)*dsdrho[ncell0 * ncells_east * nlay + ecell0 * nlay + n];
+				vsgrad[ncell0 * ncells_east * nlay + ecell0 * nlay + n] = vsgrad[ncell0 * ncells_east * nlay + ecell0 * nlay + n] + (dsedvs * dist_segment_e + dsndvs * dist_segment_n)*(-1.0);
+				vpgrad[ncell0 * ncells_east * nlay + ecell0 * nlay + n] = vpgrad[ncell0 * ncells_east * nlay + ecell0 * nlay + n] + (dsedvp * dist_segment_e + dsndvp * dist_segment_n)*(-1.0);
+				rhograd[ncell0 * ncells_east * nlay + ecell0 * nlay + n] = rhograd[ncell0 * ncells_east * nlay + ecell0 * nlay + n] + (dsedrho * dist_segment_e + dsndrho * dist_segment_n)*(-1.0);
+			}
+		}
 	}
-	//ecells.push_back(ecell1);
-	//ncells.push_back(ncell1);
 	dist_segment_e = east1-east0;
 	dist_segment_n = north1-north0;
 	mid_e = east0 + dist_segment_e/2.0;
 	mid_n = north0 + dist_segment_n/2.0;
 	proj.Reverse(lon_centr, mid_e-false_east, mid_n, mid_lat, mid_lon);
 	geod.Inverse(event_lat, event_lon, mid_lat, mid_lon, s12, az1, az2);
-	se = cos((90-az2)*M_PI/180)*(1/c[ecell1 * ncells_north + ncell1]);
-	sn = sin((90-az2)*M_PI/180)*(1/c[ecell1 * ncells_north + ncell1]);
+	se = cos((90-az2)*M_PI/180)*(1/c[ncell1 * ncells_east + ecell1]);
+	sn = sin((90-az2)*M_PI/180)*(1/c[ncell1 * ncells_east + ecell1]);
 	time = time + (se * dist_segment_e + sn * dist_segment_n)*(-1.0);
-	/*for(int n=0;n<nlay;n++){
-		double tmp = dcdvs[ecell0 * ncells_north * nperiods * nlay + ncell0 * nperiods * nlay + freq*nlay + n];
-		tmp = sqrt(2)/tmp;
-		tmp = tmp*dist_segment_e+tmp*dist_segment_n;
-		vsgrad.push_back(tmp);
-		tmp = dcdvp[ecell0 * ncells_north * nperiods * nlay + ncell0 * nperiods * nlay + freq*nlay + n];
-		tmp = sqrt(2)/tmp;
-		tmp = tmp*dist_segment_e+tmp*dist_segment_n;
-		vpgrad.push_back(tmp);
-		tmp = dcdrho[ecell0 * ncells_north * nperiods * nlay + ncell0 * nperiods * nlay + freq*nlay + n];
-		tmp = sqrt(2)/tmp;
-		tmp = tmp*dist_segment_e+tmp*dist_segment_n;
-		densgrad.push_back(tmp);
+	
+	if(calcgrads==1){
+		for(int n=0;n<nlay;n++){
+			dsedvs = cos((90.0-az2)*M_PI/180.0)*dsdvs[ncell1 * ncells_east * nlay + ecell1 * nlay + n];
+			dsedvp = cos((90.0-az2)*M_PI/180.0)*dsdvp[ncell1 * ncells_east * nlay + ecell1 * nlay + n];
+			dsedrho = cos((90.0-az2)*M_PI/180.0)*dsdrho[ncell1 * ncells_east * nlay + ecell1 * nlay + n];
+			dsndvs = sin((90.0-az2)*M_PI/180.0)*dsdvs[ncell1 * ncells_east * nlay + ecell1 * nlay + n];
+			dsndvp = sin((90.0-az2)*M_PI/180.0)*dsdvp[ncell1 * ncells_east * nlay + ecell1 * nlay + n];
+			dsndrho = sin((90.0-az2)*M_PI/180.0)*dsdrho[ncell1 * ncells_east * nlay + ecell1 * nlay + n];
+			vsgrad[ncell1 * ncells_east * nlay + ecell1 * nlay + n] = vsgrad[ncell1 * ncells_east * nlay + ecell1 * nlay + n] + (dsedvs * dist_segment_e + dsndvs * dist_segment_n)*(-1.0);
+			vpgrad[ncell1 * ncells_east * nlay + ecell1 * nlay + n] = vpgrad[ncell1 * ncells_east * nlay + ecell1 * nlay + n] + (dsedvp * dist_segment_e + dsndvp * dist_segment_n)*(-1.0);
+			rhograd[ncell1 * ncells_east * nlay + ecell1 * nlay + n] = rhograd[ncell1 * ncells_east * nlay + ecell1 * nlay + n] + (dsedrho * dist_segment_e + dsndrho * dist_segment_n)*(-1.0);
+		}
 	}
+	
 	times.push_back(time);
 	times_grads.push_back(times);
-	times_grads.push_back(ecells);
-	times_grads.push_back(ncells);
 	times_grads.push_back(vsgrad);
 	times_grads.push_back(vpgrad);
-	times_grads.push_back(densgrad);*/
-	return time; //times_grads;
+	times_grads.push_back(rhograd);
+	return times_grads;
 }
 
 int main(){
 	
 	// Read phase delay time observations
-	NcFile dtpFile("./dt_usarray_win_neu_utm.nc", NcFile::read);
+	NcFile dtpFile("./dt_tiny.nc", NcFile::read);
 	NcDim nperiodsIn = dtpFile.getDim("NumberOfPeriods");
 	NcDim nstatsIn = dtpFile.getDim("NumberOfStations");
 	NcDim nsrcsIn = dtpFile.getDim("NumberOfRays");
@@ -796,19 +753,19 @@ int main(){
 	double *lon_centr_pnt = &lon_centr;
 	NcVarAtt lonc = mpnIn.getAtt("Central_meridian");
 	lonc.getValues(lon_centr_pnt);
-	
+
 	// Conversion of periods to angular frequencies
-	std::vector<double> w;
+	std::vector<double> w(nperiods);
 	for(int n=0; n<nperiods; n++){
-		w.push_back(2.0*M_PI/periods[n]);
+		w[n] = 2.0*M_PI/periods[n];
 		if (verbose==1)
 			cout << "Kreisfreq. " << n << ": " << w[n] << " rad/s\n";
 	}
 	
 	// Read density, vs, vp from nc file
-	NcFile densFile("./dens_na_neu_utm.nc", NcFile::read);
-	NcFile vpFile("./vp_na_neu_utm.nc", NcFile::read);
-	NcFile vsFile("./vs_na_neu_utm.nc", NcFile::read);
+	NcFile densFile("./dens_tiny.nc", NcFile::read);
+	NcFile vpFile("./vp_tiny.nc", NcFile::read);
+	NcFile vsFile("./vs_tiny.nc", NcFile::read);
 	
 	// Get dimensions of model
 	NcDim nxIn=densFile.getDim("Northing");
@@ -850,6 +807,10 @@ int main(){
 	double model_cell_north = north[1] - north[0];
 	std::vector<double> model_origin = {east[0], north[0]};
 	
+	//vectors to store phase delays and gradients
+	std::vector<double> phase_delays(dtp.size(),0.0);
+	std::vector<double> dtdvs(vs_all.size(),0.0), dtdvp(vs_all.size(),0.0), dtdrho(vs_all.size(),0.0);
+	
 	// Open output files, write header lines
 	ofstream resultfile;
 	resultfile.open ("dispersion.out");
@@ -861,9 +822,10 @@ int main(){
 	
 	for(int freq=0; freq<nperiods; freq++){
 		//Vectors to store gradients, dispersion curves
-		std::vector<double> /*dcdrho, dcdvs, dcdvp,*/ dispersion;	
-		for (int estep = 0; estep<NY; estep++){
-			for (int nstep = 0; nstep<NX; nstep++){
+		std::vector<double> dsdrho(vs_all.size()), dsdvs(vs_all.size()), dsdvp(vs_all.size()), dispersion(NX*NY);	
+		for (int nstep = 0; nstep<NX; nstep++){
+			cout << "Period: " << periods[freq] << "\t NX: " << nstep << "\n";
+			for (int estep = 0; estep<NY; estep++){
 				std::vector<double> dens;
 				std::vector<double> vs;
 				std::vector<double> vp;	
@@ -871,12 +833,12 @@ int main(){
 				for (int n=0; n<nlay; n++){
 					// sort velocities, densities into 1D models 
 					dens.push_back(dens_all[n+nlay*estep+NY*nlay*nstep]);
+					vp.push_back(vp_all[n+nlay*estep+NY*nlay*nstep]);
 					vs.push_back(vs_all[n+nlay*estep+NY*nlay*nstep]);
 					// check if there's a low velocity zone
-					if (n>0 & vs[n]<vs[n-1])
+					if (n>0 && vs[n]<vs[n-1]){
 						lvz=1;
-					//cout << lvz << "\n";
-					vp.push_back(vp_all[n+nlay*estep+NY*nlay*nstep]);
+					}
 				}
 			
 				if (vs[0]<=0){
@@ -902,14 +864,6 @@ int main(){
 						cout << "cmin: " << c_lim[0] << "\t cmax: " << c_lim[1] << "\n";
 						cout << "Anzahl Schichten: " << nlay << "\n";
 						cout << "Easting: " << east[estep] << "\t Northing: " << north[nstep] << "\n";
-	
-						for(int n=0; n<nlay-1; n++)
-							cout << "Schicht " << n+1 << " von " << depth[n] << " bis "
-								<< depth[n+1] << " m mit vs = " << vs[n] << " m/s, vp = "
-								<< vp[n] << " m/s und " << dens[n] << " kg/m3 Dichte.\n";
-						cout << "Letzte Schicht ab " << depth[nlay-1] << " m: vs = "
-							<< vs[nlay-1] << " m/s, vp = " << vp[nlay-1]
-							<< " m/s, Dichte = " << dens[nlay-1] << " kg/m3.\n";
 					}
 				
 					// Shear modulus bottom layer
@@ -918,7 +872,7 @@ int main(){
 						cout << "Schermodul unterste Schicht: " << mu << "\n";
 				
 					// Compute initial R1212 polarization for large period below fundamental mode
-					double R1212 = compute_R1212(w[nperiods]/10.0, c_lim[0], vp, vs, mu, depth, dens, nlay, 0, -999);
+					double R1212 = compute_R1212(w[nperiods-1]/10.0, c_lim[0], vp, vs, mu, depth, dens, nlay, 0, -999);
 					bool pol0 = signbit(R1212);
 				
 					if(verbose==1)
@@ -976,7 +930,7 @@ int main(){
 									}
 									goto cnt;
 								}
-								// "Downward" search along c-axis for mode skipping (10 runs per default)
+								// "Downward" search along c-axis for mode skipping (2 runs per default)
 								c2 = c2-delta;
 								if (verbose==1)
 									cout << "New c2: " << c2 << "\n";
@@ -997,92 +951,87 @@ int main(){
 					}
 					c_last = (brackets.first + brackets.second)/2.0;
 					
-					dispersion.push_back(c_last);
+					dispersion[estep + NY*nstep] = c_last;
 							
 					// Write output to file
 					resultfile << "\n" << east[estep] << "\t" << north[nstep] << "\t" << (2.0*M_PI)/w[freq] << "\t" << c_last << "\t" << brackets.second-brackets.first << "\t" << max_iter;
-					
-					
-					/*for(int n=0;n<nlay;n++){
-						//Computation of Gradients
-						double R_tmp = compute_R1212(w[freq], c_last, vp, vs, mu, depth, dens, nlay, 1, n);
-						dcdvs.push_back(R_tmp);
-						R_tmp = compute_R1212(w[freq], c_last, vp, vs, mu, depth, dens, nlay, 2, n);
-						dcdvp.push_back(R_tmp);
-						R_tmp = compute_R1212(w[freq], c_last, vp, vs, mu, depth, dens, nlay, 3, n);
-						dcdrho.push_back(R_tmp);
-					}*/
-					
-					
-				//} // end loop over frequencies
+										
+					if(calcgrads==1){
+						for(int n=0;n<nlay;n++){
+							//Computation of Gradients
+							double R_tmp = compute_R1212(w[freq], c_last, vp, vs, mu, depth, dens, nlay, 1, n);
+							dsdvs[n+nlay*estep+NY*nlay*nstep] = R_tmp*(-1.0/pow(c_last,2));
+							R_tmp = compute_R1212(w[freq], c_last, vp, vs, mu, depth, dens, nlay, 2, n);
+							dsdvp[n+nlay*estep+NY*nlay*nstep] = R_tmp*(-1.0/pow(c_last,2));
+							R_tmp = compute_R1212(w[freq], c_last, vp, vs, mu, depth, dens, nlay, 3, n);
+							dsdrho[n+nlay*estep+NY*nlay*nstep] = R_tmp*(-1.0/pow(c_last,2));
+						}
+					}
 				} 
 			} // end of loop over northing
 		} // end of loop over easting
-	
-		// close file
-		resultfile << "\n";
-		resultfile.close();
-	
-		/*ofstream gradfile;
-		gradfile.open ("gradients.out");
-		gradfile << "#Source receiver comb. \t period[s] \t ecell \t ncell \n #gradvs \t gradvp \t graddens";
-		*/
-	
+				
 		// loop over all rays, computes phase delays
 		for (int src=0; src<nsrcs; src++){
-			//cout << "src: \t" << src << "\n";
+			cout << "Station Combination: " << src << "\n";
 			std::vector<vector<double>> segments;
 			segments = get_gc_segments(mpe[src_rcvr_cmb[src]], mpn[src_rcvr_cmb[src]], mpe[src_rcvr_cmb[src+nsrcs]], mpn[src_rcvr_cmb[src+nsrcs]], lon_centr);
 			std::vector<double> seg_east = segments[0];
 			std::vector<double> seg_north = segments[1];
-			//for (int freq=0; freq<nperiods; freq++){
-			//cout << "freq: \t" << freq << "\n";
-			for(int event=0; event<nevents_per_src; event++){
-				//cout << "event: \t" << event << "\n";
+			for(int event=0; event<nevents_per_src; event++){ //loop over events for each station pair
 				if (dtp[freq*nsrcs*nevents_per_src+event*nsrcs+src]==dtp_dummy | event_stat_cmb[event*nsrcs+src]==dtp_dummy){
 					// if there is only a dummy value we can skip this period
+					phase_delays[src+nsrcs*event+freq*nsrcs*nevents_per_src] = dtp_dummy;
 					delayfile << "\n" << dtp_dummy << "\t" << dtp_dummy << "\t" << event_stat_cmb[event*nsrcs+src] << "\t" << mpe[src_rcvr_cmb[src]] << "\t" << mpn[src_rcvr_cmb[src]] << "\t" << mpe[src_rcvr_cmb[src+nsrcs]] << "\t" << mpn[src_rcvr_cmb[src+nsrcs]] << "\t" << src_rcvr_cmb[src] << "\t" << src_rcvr_cmb[src+nsrcs] << "\t" << (2.0*M_PI)/w[freq] << "\t" << dtp_dummy;
 					continue;
 				}
 				else {
-					// loop over segments
+					std::vector<double> dtdvs_tmp(dsdvs.size(),0.0), dtdvp_tmp(dsdvs.size(),0.0), dtdrho_tmp(dsdvs.size(),0.0);
 					double time_total = 0.0;
-					//std::vector<double> ecells, ncells, tgradvs, tgradvp, tgradrho;
-					for(int seg=0; seg<seg_east.size()-1; seg++){
-						/*std::vector<vector<double>>*/double time_segment = get_t_segments(seg_east[seg], seg_north[seg], seg_east[seg+1], seg_north[seg+1], eventy[event_stat_cmb[event*nsrcs+src]], eventx[event_stat_cmb[event*nsrcs+src]], lon_centr, model_origin, model_cell_east, model_cell_north, dispersion, NX, freq, nperiods);//, dcdvs, dcdvp, dcdrho, nlay);
-						//std::vector<double> ts = time_segment[0];
-						time_total = time_total + time_segment;//ts[0];
-						/*std::vector<double> ectmp = time_segment[1];
-						std::vector<double> nctmp = time_segment[2];
-						for(int cell = 0; cell<ectmp.size(); cell++){
-							ecells.push_back(ectmp[cell]);
-							ncells.push_back(nctmp[cell]);
+					for(int seg=0; seg<seg_east.size()-1; seg++){ //loop over great circle segments
+						std::vector<vector<double>> time_segment = get_t_segments(seg_east[seg], seg_north[seg], seg_east[seg+1], seg_north[seg+1], eventy[event_stat_cmb[event*nsrcs+src]], eventx[event_stat_cmb[event*nsrcs+src]], lon_centr, model_origin, model_cell_east, model_cell_north, dispersion, NY, dsdvs, dsdvp, dsdrho, nlay);
+						std::vector<double> ts = time_segment[0];					
+						time_total = time_total + ts[0];
+						
+						if(calcgrads==1){
+							std::vector<double> tmp = time_segment[1];
+							std::transform (dtdvs_tmp.begin(), dtdvs_tmp.end(), tmp.begin(), dtdvs_tmp.begin(), std::plus<double>());
+							tmp = time_segment[2];
+							std::transform (dtdvp_tmp.begin(), dtdvp_tmp.end(), tmp.begin(), dtdvp_tmp.begin(), std::plus<double>());
+							tmp = time_segment[3];
+							std::transform (dtdrho_tmp.begin(), dtdrho_tmp.end(), tmp.begin(), dtdrho_tmp.begin(), std::plus<double>());
 						}
-						std::vector<double> vstmp = time_segment[3];
-						std::vector<double> vptmp = time_segment[4];
-						std::vector<double> denstmp = time_segment[5];
-						for(int ngrads=0; ngrads < vstmp.size(); ngrads++){
-							tgradvs.push_back(vstmp[ngrads]);
-							tgradvp.push_back(vptmp[ngrads]);
-							tgradrho.push_back(denstmp[ngrads]);
-						}*/
-					}
+					}//end loop ever path segments
+					phase_delays[src+nsrcs*event+freq*nsrcs*nevents_per_src] = time_total;
 					delayfile << "\n" << eventy[event_stat_cmb[event*nsrcs+src]] << "\t" << eventx[event_stat_cmb[event*nsrcs+src]] << "\t" << event_stat_cmb[event*nsrcs+src] << "\t" << mpe[src_rcvr_cmb[src]] << "\t" << mpn[src_rcvr_cmb[src]] << "\t" << mpe[src_rcvr_cmb[src+nsrcs]] << "\t" << mpn[src_rcvr_cmb[src+nsrcs]] << "\t" << src_rcvr_cmb[src] << "\t" << src_rcvr_cmb[src+nsrcs] << "\t" << (2.0*M_PI)/w[freq] << "\t" << time_total;
-					/*for(int cell=0; cell<ecells.size(); cell++){
-						gradfile << "\n" << src << "\t" << (2.0*M_PI)/w[freq] << "\t" << ecells[cell] << "\t" << ncells[cell];
-						for(int grad=0; grad<nlay; grad++){
-							gradfile << "\n" << tgradvs[cell*nlay+grad] << "\t" << tgradvp[cell*nlay+grad] << "\t" << tgradrho[cell*nlay+grad];
+					if(calcgrads==1){
+						for(int ii=0; ii<dtdvs.size(); ii++){
+							dtdvs[ii] = dtdvs[ii] + dtdvs_tmp[ii]*(dtp[freq*nsrcs*nevents_per_src+event*nsrcs+src]-time_total);
+							dtdvp[ii] = dtdvp[ii] + dtdvp_tmp[ii]*(dtp[freq*nsrcs*nevents_per_src+event*nsrcs+src]-time_total);
+							dtdrho[ii] = dtdrho[ii] + dtdrho_tmp[ii]*(dtp[freq*nsrcs*nevents_per_src+event*nsrcs+src]-time_total);
 						}
-					}*/
+					}
 				}
-			}	
+			} //end loop over events
 		} // end loop rays
-	} // end loop frequencies
+	}// end loop frequencies
+	
+	// close files
+	resultfile << "\n";
+	resultfile.close();
 	
 	delayfile << "\n";
 	delayfile.close();
 	
-	/*gradfile << "\n";
+	/*ofstream gradfile;
+	gradfile.open ("gradient_vs.out");
+	gradfile << "#Vs gradient";
+	
+	for(int i=0; i<dtdvs.size(); i++){
+		gradfile << "\n" << dtdvs[i];
+	}
+	
+	gradfile << "\n";
 	gradfile.close();*/
 
 	// end program
