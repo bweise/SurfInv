@@ -30,26 +30,27 @@ using namespace GeographicLib;
 typedef complex<double> dcomp;
 const std::complex<double> i(0, 1.0);
 
-bool calcgrads = 1; // set to 1 to calculate gradients.
-bool verbose = 0; // set to 1 for more output
-double tolerance = 0.01; // Tolerance for phase velocity [m/s]
-double length_tolerance = 1.0; // Tolerance for grat circle vs loxodrome length [m]
-double mode_skip_it = 2.0;	// Number of additional iterations to check for mode skipping & factor to increase precision
+const double false_east = 500000.0; // false eating for utm coordinates
+const bool calcgrads = 0; // set to 1 to calculate gradients.
+const bool verbose = 0; // set to 1 for more output
+const double tolerance = 0.01; // Tolerance for phase velocity [m/s]
+const double length_tolerance = 1.0; // Tolerance for grat circle vs loxodrome length [m]
+const double mode_skip_it = 2.0;	// Number of additional iterations to check for mode skipping & factor to increase precision
 
 // function of root of rayleigh velocity
-double compute_fvr(double vp, double vs, double vr){
-	double fvr = 4.0-4.0*(pow(vr,2)/pow(vs,2))+pow(vr,4)/pow(vs,4)-4.0*sqrt(1-pow(vr,2)/pow(vp,2))*sqrt(1.0-pow(vr,2)/pow(vs,2));
-	return fvr;
+double compute_fvr(const double &vp, const double &vs, const double &vr){
+	return 4.0-4.0*(pow(vr,2)/pow(vs,2))+pow(vr,4)/pow(vs,4)-4.0*sqrt(1-pow(vr,2)/pow(vp,2))*sqrt(1.0-pow(vr,2)/pow(vs,2));
+	//return fvr;
 }
 
 // derivative of rayleigh velocity function
-double compute_dfvr(double vp, double vs, double vr){
-	double dfvr = -8.0*vr/pow(vs,2)+4.0*pow(vr,3)/pow(vs,4)+(4.0*vr*(pow(vp,2)+pow(vs,2)-2.0*pow(vr,2)))/(vp*vs*sqrt((vp-vr)*(vp+vr))*sqrt((vs-vr)*(vs+vr)));
-	return dfvr;
+double compute_dfvr(const double &vp, const double &vs, const double &vr){
+	return -8.0*vr/pow(vs,2)+4.0*pow(vr,3)/pow(vs,4)+(4.0*vr*(pow(vp,2)+pow(vs,2)-2.0*pow(vr,2)))/(vp*vs*sqrt((vp-vr)*(vp+vr))*sqrt((vs-vr)*(vs+vr)));
+	//return dfvr;
 }
 
 // computation of Rayleigh velocity of homogenous half space using Newton Raphson method
-double newton_vr(double vp, double vs){
+double newton_vr(const double &vp, const double &vs){
 	// variables to store rayleigh velocity
 	double vrlast = vs*0.99;
 	double vr;
@@ -67,10 +68,11 @@ double newton_vr(double vp, double vs){
 	return vr;
 }
 
-std::tuple<dcomp,dcomp,double,double,double,double,double,dcomp,dcomp,double,double,double> compute_util(double w, double c, double vp, double vs, double dn, bool botlay){
+std::tuple<dcomp,dcomp,double,double,double,double,double,dcomp,dcomp,double,double,double> compute_util(const double &w, const double &c, const double &vp, const double &vs, const double &dn, const bool &botlay){
 	// computes some constants for each layer (vertical wave numbers and some derived properties)
 	dcomp hv, kv;
-	double SH, CH, SK, CK, mh, mk, k = w/c;
+	double SH, CH, SK, CK, mh, mk;
+	const double k = w/c;
 	if (c < vp){
 		mh = sqrt(pow(w/c,2)-pow(w/vp,2));
 		hv = mh;
@@ -105,26 +107,27 @@ std::tuple<dcomp,dcomp,double,double,double,double,double,dcomp,dcomp,double,dou
 			CK = cos(mk*dn);
 		}
 	}
-	double gam = 2.0*pow(vs,2)/pow(c,2);
-	dcomp hvnorm = hv/k;
-	dcomp kvnorm = kv/k;
-	double l = 2.0*pow(k,2)-pow(w/vs,2);
+	const double gam = 2.0*pow(vs,2)/pow(c,2);
+	const dcomp hvnorm = hv/k;
+	const dcomp kvnorm = kv/k;
+	const double l = 2.0*pow(k,2)-pow(w/vs,2);
 	
 	return std::make_tuple(hv, kv, SH, CH, SK, CK, gam, hvnorm, kvnorm, l, mh, mk);
 }
 
-std::tuple<dcomp, dcomp, double, double, double, double, double, double, double, double> compute_util_grads(double w, double vs, double vp, double c, double thck, bool botlay){
-	auto util = compute_util(w, c, vp, vs, thck, botlay);
+std::tuple<dcomp, dcomp, double, double, double, double, double, double, double, double> compute_util_grads(const double &w, const double &vs, const double &vp, const double &c, const double &thck, const bool &botlay){
+	const auto util = compute_util(w, c, vp, vs, thck, botlay);
 	
-	double SH = std::get<2>(util);
-	double CH = std::get<3>(util);
-	double SK = std::get<4>(util);
-	double CK = std::get<5>(util);
-	double mh = std::get<10>(util);
-	double mk = std::get<11>(util);
+	const double SH = std::get<2>(util);
+	const double CH = std::get<3>(util);
+	const double SK = std::get<4>(util);
+	const double CK = std::get<5>(util);
+	const double mh = std::get<10>(util);
+	const double mk = std::get<11>(util);
 	
 	dcomp hv_h, kv_k;
-	double mkk, mhh, k = w/c;
+	double mkk, mhh;
+	const double k = w/c;
 	if(c<vp){
 		mhh = pow(w,2)/(mh*pow(vp,3));
 		hv_h = mhh;
@@ -147,226 +150,227 @@ std::tuple<dcomp, dcomp, double, double, double, double, double, double, double,
 			kv_k = i*mkk;
 	}
 		
-	double hvnorm_h = (2.0*pow(c,2))/pow(vp,3);
-	double kvnorm_k = (2.0*pow(c,2))/pow(vs,3);
-	double gam_k = (4.0*vs)/pow(c,2);
-	double l_k = 2.0*pow(w,2)/pow(vs,3);
-	double CHH = (w*c*thck*SH)/pow(vp,3);
-	double CKK = (w*c*thck*SK)/pow(vs,3);
-	double SHH = (mhh/mh) * (k*thck*CH - SH);
-	double SKK = (mkk/mk) * (k*thck*CK - SK);
+	const double hvnorm_h = (2.0*pow(c,2))/pow(vp,3);
+	const double kvnorm_k = (2.0*pow(c,2))/pow(vs,3);
+	const double gam_k = (4.0*vs)/pow(c,2);
+	const double l_k = 2.0*pow(w,2)/pow(vs,3);
+	const double CHH = (w*c*thck*SH)/pow(vp,3);
+	const double CKK = (w*c*thck*SK)/pow(vs,3);
+	const double SHH = (mhh/mh) * (k*thck*CH - SH);
+	const double SKK = (mkk/mk) * (k*thck*CK - SK);
 	
 	return std::make_tuple(hv_h, kv_k, hvnorm_h, kvnorm_k, gam_k, l_k, CHH, CKK, SHH, SKK);	
 }
 
-std::tuple<double,double,double,double,double> compute_T(double w, double c, double vp, double vs, double mu){
+std::tuple<double,double,double,double,double> compute_T(const double &w, const double &c, const double &vp, const double &vs, const double &mu){
 	// computes layer matrix for bottom layer (an i denotes an imaginary subdeterminant e.g. iT1214)
-	double k = w/c;
-	auto util = compute_util(w, c, vp, vs, 99999.0, 1);
-	dcomp hv = std::get<0>(util);
-	dcomp kv = std::get<1>(util);
-	double l = std::get<9>(util);
+	const double k = w/c;
+	const auto util = compute_util(w, c, vp, vs, 99999.0, 1);
+	const dcomp hv = std::get<0>(util);
+	const dcomp kv = std::get<1>(util);
+	const double l = std::get<9>(util);
 	
-	dcomp fact = pow((-1.0)*pow(vs,2)/(2*mu*hv*kv*pow(w,2)),2);
+	const dcomp fact = pow((-1.0)*pow(vs,2)/(2*mu*hv*kv*pow(w,2)),2);
 
-	double T1212 = std::real(pow(mu,2)*kv*hv*(pow(l,2)-4.0*pow(k,2)*kv*hv)*fact);
-	double T1213 = std::real(mu*pow(hv,2)*kv*(l-2.0*pow(k,2))*fact);
-	double iT1214 = std::real(k*mu*hv*kv*(l-2.0*hv*kv)*fact);
-	double T1224 = std::real(mu*hv*pow(kv,2)*(2.0*pow(k,2)-l)*fact);
-	double T1234 = std::real(hv*kv*(pow(k,2)-hv*kv)*fact);
+	const double T1212 = std::real(pow(mu,2)*kv*hv*(pow(l,2)-4.0*pow(k,2)*kv*hv)*fact);
+	const double T1213 = std::real(mu*pow(hv,2)*kv*(l-2.0*pow(k,2))*fact);
+	const double iT1214 = std::real(k*mu*hv*kv*(l-2.0*hv*kv)*fact);
+	const double T1224 = std::real(mu*hv*pow(kv,2)*(2.0*pow(k,2)-l)*fact);
+	const double T1234 = std::real(hv*kv*(pow(k,2)-hv*kv)*fact);
 	
 	return std::make_tuple(T1212,T1213,iT1214,T1224,T1234);
 }
 
-std::tuple<double,double,double,double,double> compute_T_vs(double w, double c, double vp, double vs, double mu){
-	auto T = compute_T(w, c, vp, vs, mu);
-	double T1212 = std::get<0>(T);
-	double iT1214 = std::get<2>(T);
+std::tuple<double,double,double,double,double> compute_T_vs(const double &w, const double &c, const double &vp, const double &vs, const double &mu){
+	const auto T = compute_T(w, c, vp, vs, mu);
+	const double T1212 = std::get<0>(T);
+	const double iT1214 = std::get<2>(T);
 	
-	auto util = compute_util(w, c, vp, vs, 99999.0, 1);
-	dcomp hv = std::get<0>(util);
-	dcomp kv = std::get<1>(util);
-	double l = std::get<9>(util);
+	const auto util = compute_util(w, c, vp, vs, 99999.0, 1);
+	const dcomp hv = std::get<0>(util);
+	const dcomp kv = std::get<1>(util);
+	const double l = std::get<9>(util);
 	
-	auto util_grads = compute_util_grads(w, vs, vp, c, 99999.0, 1);
-	dcomp kv_k = std::get<1>(util_grads);
-	double l_k = std::get<5>(util_grads);
+	const auto util_grads = compute_util_grads(w, vs, vp, c, 99999.0, 1);
+	const dcomp kv_k = std::get<1>(util_grads);
+	const double l_k = std::get<5>(util_grads);
 	
-	double gT1212 = std::real(4.0*T1212/vs + pow(vs,4)*(2.0*l*l_k*kv - pow(l,2)*kv_k)/(4.0*pow(w,4)*hv*pow(kv,2)));
-	double gT1213 = std::real(kv_k*pow(vs,2)/(4.0*mu*pow(w,2)*pow(kv,2)));
-	double igT1214 = std::real(2.0*iT1214/vs + pow(vs,4)*(l_k*kv - l*kv_k)/(4.0*mu*pow(w,3)*c*hv*pow(kv,2)));
-	double gT1224 = 0.0;
-	double gT1234 = std::real((-1.0)*kv_k*pow(vs,4)/(4.0*pow(mu,2)*pow(w,2)*pow(c,2)*hv*pow(kv,2)));
-	
-	return std::make_tuple(gT1212, gT1213, igT1214, gT1224, gT1234);
-}
-
-std::tuple<double,double,double,double,double> compute_T_vp(double w, double c, double vp, double vs, double mu){
-	auto util = compute_util(w, c, vp, vs, 99999.0, 1);
-	dcomp hv = std::get<0>(util);
-	dcomp kv = std::get<1>(util);
-	double l = std::get<9>(util);
-	
-	auto util_grads = compute_util_grads(w, vs, vp, c, 99999.0, 1);
-	dcomp hv_h = std::get<0>(util_grads);
-	
-	double gT1212 = std::real((-1.0) * pow(vs,4)*pow(l,2)*hv_h/(4.0*pow(w,4)*pow(hv,2)*kv));
-	double gT1213 = 0.0;
-	double igT1214 = std::real((-1.0)*pow(vs,4)*l*hv_h/(4.0*mu*pow(w,3)*c*pow(hv,2)*kv));
-	double gT1224 = std::real((-1.0)*hv_h*pow(vs,2)/(4.0*mu*pow(w,2)*pow(hv,2)));
-	double gT1234 = std::real((-1.0)*hv_h*pow(vs,4)/(4.0*pow(mu,2)*pow(w,2)*pow(c,2)*pow(hv,2)*kv));
+	const double gT1212 = std::real(4.0*T1212/vs + pow(vs,4)*(2.0*l*l_k*kv - pow(l,2)*kv_k)/(4.0*pow(w,4)*hv*pow(kv,2)));
+	const double gT1213 = std::real(kv_k*pow(vs,2)/(4.0*mu*pow(w,2)*pow(kv,2)));
+	const double igT1214 = std::real(2.0*iT1214/vs + pow(vs,4)*(l_k*kv - l*kv_k)/(4.0*mu*pow(w,3)*c*hv*pow(kv,2)));
+	const double gT1224 = 0.0;
+	const double gT1234 = std::real((-1.0)*kv_k*pow(vs,4)/(4.0*pow(mu,2)*pow(w,2)*pow(c,2)*hv*pow(kv,2)));
 	
 	return std::make_tuple(gT1212, gT1213, igT1214, gT1224, gT1234);
 }
 
-std::tuple<double,double,double,double,double> compute_T_rho(double w, double c, double vp, double vs, double mu){
-	auto T = compute_T(w, c, vp, vs, mu);
-	double T1213 = std::get<1>(T);
-	double iT1214 = std::get<2>(T);
-	double T1224 = std::get<3>(T);
-	double T1234 = std::get<4>(T);
+std::tuple<double,double,double,double,double> compute_T_vp(const double &w, const double &c, const double &vp, const double &vs, const double &mu){
+	const auto util = compute_util(w, c, vp, vs, 99999.0, 1);
+	const dcomp hv = std::get<0>(util);
+	const dcomp kv = std::get<1>(util);
+	const double l = std::get<9>(util);
 	
-	double gT1212 = 0.0;
-	double gT1213 = (-1.0)*T1213*pow(vs,2)/mu;
-	double igT1214 = (-1.0)*iT1214*pow(vs,2)/mu;
-	double gT1224 = (-1.0)*T1224*pow(vs,2)/mu;
-	double gT1234 = (-2.0)*T1234*pow(vs,2)/mu;
+	const auto util_grads = compute_util_grads(w, vs, vp, c, 99999.0, 1);
+	const dcomp hv_h = std::get<0>(util_grads);
+	
+	const double gT1212 = std::real((-1.0) * pow(vs,4)*pow(l,2)*hv_h/(4.0*pow(w,4)*pow(hv,2)*kv));
+	const double gT1213 = 0.0;
+	const double igT1214 = std::real((-1.0)*pow(vs,4)*l*hv_h/(4.0*mu*pow(w,3)*c*pow(hv,2)*kv));
+	const double gT1224 = std::real((-1.0)*hv_h*pow(vs,2)/(4.0*mu*pow(w,2)*pow(hv,2)));
+	const double gT1234 = std::real((-1.0)*hv_h*pow(vs,4)/(4.0*pow(mu,2)*pow(w,2)*pow(c,2)*pow(hv,2)*kv));
 	
 	return std::make_tuple(gT1212, gT1213, igT1214, gT1224, gT1234);
 }
 
-std::tuple<double,double,double,double,double,double,double,double,double,double,double,double,double,double,double> compute_G(double c, double dn, double w, double vp, double vs, double dens){
+std::tuple<double,double,double,double,double> compute_T_rho(const double &w, const double &c, const double &vp, const double &vs, const double &mu){
+	const auto T = compute_T(w, c, vp, vs, mu);
+	const double T1213 = std::get<1>(T);
+	const double iT1214 = std::get<2>(T);
+	const double T1224 = std::get<3>(T);
+	const double T1234 = std::get<4>(T);
+	
+	const double gT1212 = 0.0;
+	const double gT1213 = (-1.0)*T1213*pow(vs,2)/mu;
+	const double igT1214 = (-1.0)*iT1214*pow(vs,2)/mu;
+	const double gT1224 = (-1.0)*T1224*pow(vs,2)/mu;
+	const double gT1234 = (-2.0)*T1234*pow(vs,2)/mu;
+	
+	return std::make_tuple(gT1212, gT1213, igT1214, gT1224, gT1234);
+}
+
+std::tuple<double,double,double,double,double,double,double,double,double,double,double,double,double,double,double> compute_G(const double &c, const double &dn, const double &w, const double &vp, const double &vs, const double &dens){
 	// computes subdeterminants of G matrix (an i denotes an imaginary subdeterminant e.g. iG1214)
-	auto kvert = compute_util(w, c, vp, vs, dn, 0);
-	double SH = std::get<2>(kvert);
-	double CH = std::get<3>(kvert);
-	double SK = std::get<4>(kvert);
-	double CK = std::get<5>(kvert);
-	double gam = std::get<6>(kvert);
-	dcomp hvnorm = std::get<7>(kvert);
-	dcomp kvnorm = std::get<8>(kvert);
+	const auto kvert = compute_util(w, c, vp, vs, dn, 0);
+	const double SH = std::get<2>(kvert);
+	const double CH = std::get<3>(kvert);
+	const double SK = std::get<4>(kvert);
+	const double CK = std::get<5>(kvert);
+	const double gam = std::get<6>(kvert);
+	const dcomp hvnorm = std::get<7>(kvert);
+	const dcomp kvnorm = std::get<8>(kvert);
 	
-	double G1212 = std::real(2.0*gam * (1.0-gam) + (2.0*pow(gam,2)-2.0*gam+1.0) * CH*CK - (pow(1.0-gam,2) + pow(gam,2)*pow(hvnorm,2)*pow(kvnorm,2))*SH*SK);
-	double G1213 = std::real((1.0/(dens*w*c))*(CH*SK - SH*CK*pow(hvnorm,2)));
-	double iG1214 = std::real((1.0/(dens*w*c))*((1.0 - 2.0*gam)*(1.0-CK*CH) + (1.0 - gam - gam*pow(hvnorm,2)*pow(kvnorm,2))*SH*SK));
-	double G1224 = std::real((1.0/(dens*w*c))*(pow(kvnorm,2)*CH*SK - SH*CK));
-	double G1234 = std::real((-1.0/(pow(dens,2)*pow(w,2)*pow(c,2)))*(2.0*(1.0 - CH*CK) + (1.0 + pow(kvnorm,2)*pow(hvnorm,2))*SK*SH));
-	double G1312 = std::real(dens*w*c*(pow(gam,2)*pow(kvnorm,2)*CH*SK - pow(1.0-gam,2)*SH*CK));
-	double G1313 = std::real(CH*CK);
-	double iG1314 = std::real((1.0 - gam)*SH*CK + gam*pow(kvnorm,2)*CH*SK);
-	double G1324 = std::real((-1.0)*pow(kvnorm,2)*SH*SK);
-	double iG1412 = std::real(dens*w*c*((3.0*pow(gam,2) - 2.0*pow(gam,3) - gam)*(1.0 - CH*CK)+(pow(1.0 - gam,3) - pow(gam,3)*pow(hvnorm,2)*pow(kvnorm,2))*SH*SK));
-	double iG1413 = std::real((-1.0)*((1.0 - gam)*CH*SK + gam*pow(hvnorm,2)*SH*CK));
-	double G1414 = std::real(1.0 - 2.0*gam*(1.0 - gam)*(1.0 - CH*CK) + (pow(1.0 - gam,2) + pow(gam,2)*pow(kvnorm,2)*pow(hvnorm,2))*SH*SK);
-	double G2412 = std::real(dens*w*c*(pow(1.0 - gam,2)*CH*SK - pow(gam,2)*SH*CK*pow(hvnorm,2)));
-	double G2413 = std::real((-1.0)*pow(hvnorm,2)*SH*SK);
-	double G3412 = std::real((-1.0)*pow(dens,2)*pow(w,2)*pow(c,2)*(2.0*pow(gam,2)*pow(1.0 - gam,2)*(1.0 - CH*CK) + (pow(1.0 - gam,4)+pow(gam,4)*pow(hvnorm,2)*pow(kvnorm,2))*SH*SK));
+	const double G1212 = std::real(2.0*gam * (1.0-gam) + (2.0*pow(gam,2)-2.0*gam+1.0) * CH*CK - (pow(1.0-gam,2) + pow(gam,2)*pow(hvnorm,2)*pow(kvnorm,2))*SH*SK);
+	const double G1213 = std::real((1.0/(dens*w*c))*(CH*SK - SH*CK*pow(hvnorm,2)));
+	const double iG1214 = std::real((1.0/(dens*w*c))*((1.0 - 2.0*gam)*(1.0-CK*CH) + (1.0 - gam - gam*pow(hvnorm,2)*pow(kvnorm,2))*SH*SK));
+	const double G1224 = std::real((1.0/(dens*w*c))*(pow(kvnorm,2)*CH*SK - SH*CK));
+	const double G1234 = std::real((-1.0/(pow(dens,2)*pow(w,2)*pow(c,2)))*(2.0*(1.0 - CH*CK) + (1.0 + pow(kvnorm,2)*pow(hvnorm,2))*SK*SH));
+	const double G1312 = std::real(dens*w*c*(pow(gam,2)*pow(kvnorm,2)*CH*SK - pow(1.0-gam,2)*SH*CK));
+	const double G1313 = std::real(CH*CK);
+	const double iG1314 = std::real((1.0 - gam)*SH*CK + gam*pow(kvnorm,2)*CH*SK);
+	const double G1324 = std::real((-1.0)*pow(kvnorm,2)*SH*SK);
+	const double iG1412 = std::real(dens*w*c*((3.0*pow(gam,2) - 2.0*pow(gam,3) - gam)*(1.0 - CH*CK)+(pow(1.0 - gam,3) - pow(gam,3)*pow(hvnorm,2)*pow(kvnorm,2))*SH*SK));
+	const double iG1413 = std::real((-1.0)*((1.0 - gam)*CH*SK + gam*pow(hvnorm,2)*SH*CK));
+	const double G1414 = std::real(1.0 - 2.0*gam*(1.0 - gam)*(1.0 - CH*CK) + (pow(1.0 - gam,2) + pow(gam,2)*pow(kvnorm,2)*pow(hvnorm,2))*SH*SK);
+	const double G2412 = std::real(dens*w*c*(pow(1.0 - gam,2)*CH*SK - pow(gam,2)*SH*CK*pow(hvnorm,2)));
+	const double G2413 = std::real((-1.0)*pow(hvnorm,2)*SH*SK);
+	const double G3412 = std::real((-1.0)*pow(dens,2)*pow(w,2)*pow(c,2)*(2.0*pow(gam,2)*pow(1.0 - gam,2)*(1.0 - CH*CK) + (pow(1.0 - gam,4)+pow(gam,4)*pow(hvnorm,2)*pow(kvnorm,2))*SH*SK));
 		
 	return std::make_tuple(G1212,G1213,iG1214,G1224,G1234,G1312,G1313,iG1314,G1324,iG1412,iG1413,G1414,G2412,G2413,G3412);
 }
 
-std::tuple<double,double,double,double,double,double,double,double,double,double,double,double,double,double,double> compute_G_vs(double c, double dn, double w, double vp, double vs, double dens){
-	auto kvert = compute_util(w, c, vp, vs, dn, 0);
-	double SH = std::get<2>(kvert);
-	double CH = std::get<3>(kvert);
-	double SK = std::get<4>(kvert);
-	double CK = std::get<5>(kvert);
-	double gam = std::get<6>(kvert);
-	dcomp hvnorm = std::get<7>(kvert);
-	dcomp kvnorm = std::get<8>(kvert);
+std::tuple<double,double,double,double,double,double,double,double,double,double,double,double,double,double,double> compute_G_vs(const double &c, const double &dn, const double &w, const double &vp, const double &vs, const double &dens){
+	const auto kvert = compute_util(w, c, vp, vs, dn, 0);
+	const double SH = std::get<2>(kvert);
+	const double CH = std::get<3>(kvert);
+	const double SK = std::get<4>(kvert);
+	const double CK = std::get<5>(kvert);
+	const double gam = std::get<6>(kvert);
+	const dcomp hvnorm = std::get<7>(kvert);
+	const dcomp kvnorm = std::get<8>(kvert);
 	
-	auto util_grads = compute_util_grads(w, vs, vp, c, dn, 0);
-	double kvnorm_k = std::get<3>(util_grads);
-	double gam_k = std::get<4>(util_grads);
-	double CKK = std::get<7>(util_grads);
-	double SKK = std::get<9>(util_grads);
+	const auto util_grads = compute_util_grads(w, vs, vp, c, dn, 0);
+	const double kvnorm_k = std::get<3>(util_grads);
+	const double gam_k = std::get<4>(util_grads);
+	const double CKK = std::get<7>(util_grads);
+	const double SKK = std::get<9>(util_grads);
 	
-	double gG1212 = std::real(2.0*gam_k*(1.0-2.0*gam)*(1.0-CH*CK)+(2.0*pow(gam,2)-2.0*gam+1)*CH*CKK-(2.0*gam_k*(gam-1.0)+2.0*gam*gam_k*pow(hvnorm,2)*pow(kvnorm,2)+pow(gam,2)*pow(hvnorm,2)*kvnorm_k)*SH*SK-(pow((1.0-gam),2)+pow(gam,2)*pow(hvnorm,2)*pow(kvnorm,2))*SH*SKK);
-	double gG1213 = std::real((1.0/(dens*w*c))*(CH*SKK-pow(hvnorm,2)*SH*CKK));
-	double igG1214 = std::real((1.0/(dens*w*c))*((-2.0)*gam_k*(1.0-CH*CK)-(1.0-2.0*gam)*CH*CKK)+(1.0/(dens*w*c))*(((-1.0)*gam_k-gam_k*pow(hvnorm,2)*pow(kvnorm,2)-gam*pow(hvnorm,2)*kvnorm_k)*SH*SK+(1.0-gam-gam*pow(hvnorm,2)*pow(kvnorm,2))*SH*SKK));
-	double gG1224 = std::real((1.0/(dens*w*c))*(kvnorm_k*CH*SK+pow(kvnorm,2)*CH*SKK-SH*CKK));
-	double gG1234 = std::real((1.0/pow((dens*w*c),2))*(-2.0*CH*CKK+(1.0+pow(hvnorm,2)*pow(kvnorm,2))*SH*SKK+pow(hvnorm,2)*kvnorm_k*SH*SK));
-	double gG1312 = std::real(dens*w*c*(2.0*gam*gam_k*pow(kvnorm,2)*CH*SK+pow(gam,2)*kvnorm_k*CH*SK+pow(gam,2)*pow(kvnorm,2)*CH*SKK)+dens*w*c*(2.0*gam_k*(1.0-gam)*SH*CK-pow((1.0-gam),2)*SH*CKK));
-	double gG1313 = std::real(CH*CKK);
-	double igG1314 = std::real((-1.0)*gam_k*SH*CK+(1.0-gam)*SH*CKK+gam_k*pow(kvnorm,2)*CH*SK+gam*kvnorm_k*CH*SK+gam*pow(kvnorm,2)*CH*SKK);
-	double gG1324 = std::real((-1.0)*kvnorm_k*SH*SK-pow(kvnorm,2)*SH*SKK);
-	double igG1412 = std::real(dens*w*c*(gam_k*(-6.0*pow(gam,2)+6.0*gam-1.0)*(1.0-CH*CK)-(pow(gam,2)-gam)*(1.0-2.0*gam)*CH*CKK)+dens*w*c*(-3.0*pow((1.0-gam),2)*gam_k-3.0*pow(gam,2)*gam_k*pow(hvnorm,2)*pow(kvnorm,2)-pow(gam,3)*pow(hvnorm,2)*kvnorm_k)*SH*SK+dens*w*c*(pow((1.0-gam),3)-pow(gam,3)*pow(hvnorm,2)*pow(kvnorm,2))*SH*SKK);
-	double igG1413 = std::real((-1.0)*((1.0-gam)*CH*SKK-gam_k*CH*SK+gam_k*pow(hvnorm,2)*SH*CK+gam*pow(hvnorm,2)*SH*CKK));
-	double gG1414 = std::real(2.0*gam_k*(2.0*gam-1.0)*(1.0-CH*CK)-2.0*(pow(gam,2)-gam)*CH*CKK+(2.0*(gam-1)*gam_k+2.0*gam*gam_k*pow(hvnorm,2)*pow(kvnorm,2)+pow(gam,2)*pow(hvnorm,2)*kvnorm_k)*SH*SK+(pow((1.0-gam),2)+pow(gam,2)*pow(hvnorm,2)*pow(kvnorm,2))*SH*SKK);
-	double gG2412 = std::real(dens*w*c*(2.0*(gam-1.0)*gam_k*CH*SK+pow((1.0-gam),2)*CH*SKK-2.0*gam*gam_k*pow(hvnorm,2)*SH*CK-pow(gam,2)*pow(hvnorm,2)*SH*CKK));
-	double gG2413 = std::real((-1.0)*pow(hvnorm,2)*SH*SKK);
-	double gG3412 = std::real((-1.0)*pow((dens*c*w),2)*(4.0*gam*gam_k*(1.0+2.0*pow(gam,2)-3.0*gam)*(1.0-CH*CK)-2.0*pow(gam,2)*pow((1.0-gam),2)*CH*CKK)-pow((dens*c*w),2)*((pow((1.0-gam),4)+pow(gam,4)*pow(hvnorm,2)*pow(kvnorm,2))*SH*SKK)-pow((dens*c*w),2)*((-4.0*gam_k*pow((1.0-gam),3)+4.0*pow(gam,3)*gam_k*pow(hvnorm,2)*pow(kvnorm,2)+pow(gam,4)*pow(hvnorm,2)*kvnorm_k)*SH*SK));
+	const double gG1212 = std::real(2.0*gam_k*(1.0-2.0*gam)*(1.0-CH*CK)+(2.0*pow(gam,2)-2.0*gam+1)*CH*CKK-(2.0*gam_k*(gam-1.0)+2.0*gam*gam_k*pow(hvnorm,2)*pow(kvnorm,2)+pow(gam,2)*pow(hvnorm,2)*kvnorm_k)*SH*SK-(pow((1.0-gam),2)+pow(gam,2)*pow(hvnorm,2)*pow(kvnorm,2))*SH*SKK);
+	const double gG1213 = std::real((1.0/(dens*w*c))*(CH*SKK-pow(hvnorm,2)*SH*CKK));
+	const double igG1214 = std::real((1.0/(dens*w*c))*((-2.0)*gam_k*(1.0-CH*CK)-(1.0-2.0*gam)*CH*CKK)+(1.0/(dens*w*c))*(((-1.0)*gam_k-gam_k*pow(hvnorm,2)*pow(kvnorm,2)-gam*pow(hvnorm,2)*kvnorm_k)*SH*SK+(1.0-gam-gam*pow(hvnorm,2)*pow(kvnorm,2))*SH*SKK));
+	const double gG1224 = std::real((1.0/(dens*w*c))*(kvnorm_k*CH*SK+pow(kvnorm,2)*CH*SKK-SH*CKK));
+	const double gG1234 = std::real((1.0/pow((dens*w*c),2))*(-2.0*CH*CKK+(1.0+pow(hvnorm,2)*pow(kvnorm,2))*SH*SKK+pow(hvnorm,2)*kvnorm_k*SH*SK));
+	const double gG1312 = std::real(dens*w*c*(2.0*gam*gam_k*pow(kvnorm,2)*CH*SK+pow(gam,2)*kvnorm_k*CH*SK+pow(gam,2)*pow(kvnorm,2)*CH*SKK)+dens*w*c*(2.0*gam_k*(1.0-gam)*SH*CK-pow((1.0-gam),2)*SH*CKK));
+	const double gG1313 = std::real(CH*CKK);
+	const double igG1314 = std::real((-1.0)*gam_k*SH*CK+(1.0-gam)*SH*CKK+gam_k*pow(kvnorm,2)*CH*SK+gam*kvnorm_k*CH*SK+gam*pow(kvnorm,2)*CH*SKK);
+	const double gG1324 = std::real((-1.0)*kvnorm_k*SH*SK-pow(kvnorm,2)*SH*SKK);
+	const double igG1412 = std::real(dens*w*c*(gam_k*(-6.0*pow(gam,2)+6.0*gam-1.0)*(1.0-CH*CK)-(pow(gam,2)-gam)*(1.0-2.0*gam)*CH*CKK)+dens*w*c*(-3.0*pow((1.0-gam),2)*gam_k-3.0*pow(gam,2)*gam_k*pow(hvnorm,2)*pow(kvnorm,2)-pow(gam,3)*pow(hvnorm,2)*kvnorm_k)*SH*SK+dens*w*c*(pow((1.0-gam),3)-pow(gam,3)*pow(hvnorm,2)*pow(kvnorm,2))*SH*SKK);
+	const double igG1413 = std::real((-1.0)*((1.0-gam)*CH*SKK-gam_k*CH*SK+gam_k*pow(hvnorm,2)*SH*CK+gam*pow(hvnorm,2)*SH*CKK));
+	const double gG1414 = std::real(2.0*gam_k*(2.0*gam-1.0)*(1.0-CH*CK)-2.0*(pow(gam,2)-gam)*CH*CKK+(2.0*(gam-1)*gam_k+2.0*gam*gam_k*pow(hvnorm,2)*pow(kvnorm,2)+pow(gam,2)*pow(hvnorm,2)*kvnorm_k)*SH*SK+(pow((1.0-gam),2)+pow(gam,2)*pow(hvnorm,2)*pow(kvnorm,2))*SH*SKK);
+	const double gG2412 = std::real(dens*w*c*(2.0*(gam-1.0)*gam_k*CH*SK+pow((1.0-gam),2)*CH*SKK-2.0*gam*gam_k*pow(hvnorm,2)*SH*CK-pow(gam,2)*pow(hvnorm,2)*SH*CKK));
+	const double gG2413 = std::real((-1.0)*pow(hvnorm,2)*SH*SKK);
+	const double gG3412 = std::real((-1.0)*pow((dens*c*w),2)*(4.0*gam*gam_k*(1.0+2.0*pow(gam,2)-3.0*gam)*(1.0-CH*CK)-2.0*pow(gam,2)*pow((1.0-gam),2)*CH*CKK)-pow((dens*c*w),2)*((pow((1.0-gam),4)+pow(gam,4)*pow(hvnorm,2)*pow(kvnorm,2))*SH*SKK)-pow((dens*c*w),2)*((-4.0*gam_k*pow((1.0-gam),3)+4.0*pow(gam,3)*gam_k*pow(hvnorm,2)*pow(kvnorm,2)+pow(gam,4)*pow(hvnorm,2)*kvnorm_k)*SH*SK));
 	return std::make_tuple(gG1212,gG1213,igG1214,gG1224,gG1234,gG1312,gG1313,igG1314,gG1324,igG1412,igG1413,gG1414,gG2412,gG2413,gG3412);
 }
 
-std::tuple<double,double,double,double,double,double,double,double,double,double,double,double,double,double,double> compute_G_vp(double c, double dn, double w, double vp, double vs, double dens){
-	auto kvert = compute_util(w, c, vp, vs, dn, 0);
-	double SH = std::get<2>(kvert);
-	double SK = std::get<4>(kvert);
-	double CK = std::get<5>(kvert);
-	double gam = std::get<6>(kvert);
-	dcomp hvnorm = std::get<7>(kvert);
-	dcomp kvnorm = std::get<8>(kvert);
+std::tuple<double,double,double,double,double,double,double,double,double,double,double,double,double,double,double> compute_G_vp(const double &c, const double &dn, const double &w, const double &vp, const double &vs, const double &dens){
+	const auto kvert = compute_util(w, c, vp, vs, dn, 0);
+	const double SH = std::get<2>(kvert);
+	const double SK = std::get<4>(kvert);
+	const double CK = std::get<5>(kvert);
+	const double gam = std::get<6>(kvert);
+	const dcomp hvnorm = std::get<7>(kvert);
+	const dcomp kvnorm = std::get<8>(kvert);
 	
-	auto util_grads = compute_util_grads(w, vs, vp, c, dn, 0);
-	double hvnorm_h = std::get<2>(util_grads);
-	double CHH = std::get<6>(util_grads);
-	double SHH = std::get<8>(util_grads);
+	const auto util_grads = compute_util_grads(w, vs, vp, c, dn, 0);
+	const double hvnorm_h = std::get<2>(util_grads);
+	const double CHH = std::get<6>(util_grads);
+	const double SHH = std::get<8>(util_grads);
 	
-	double gG1212 = std::real((2.0*pow(gam,2)-2.0*gam+1.0)*CHH*CK-pow(gam,2)*hvnorm_h*pow(kvnorm,2)*SH*SK-(pow((1.0-gam),2)+pow(gam,2)*pow(hvnorm,2)*pow(kvnorm,2))*SHH*SK);
-	double gG1213 = std::real((1.0/(dens*w*c))*(CHH*SK-hvnorm_h*SH*CK-pow(hvnorm,2)*SHH*CK));
-	double igG1214 = std::real((1.0/(dens*w*c))*((2.0*gam-1.0)*CHH*CK+(1.0-gam-gam*pow(hvnorm,2)*pow(kvnorm,2))*SHH*SK-gam*hvnorm_h*pow(kvnorm,2)*SH*SK));
-	double gG1224 = std::real((1.0/(dens*w*c))*(pow(kvnorm,2)*CHH*SK-SHH*CK));
-	double gG1234 = std::real(((-1.0)/pow((w*dens*c),2))*(-2.0*CHH*CK+(1.0+pow(kvnorm,2)*pow(hvnorm,2))*SHH*SK+hvnorm_h*pow(kvnorm,2)*SH*SK));
-	double gG1312 = std::real(dens*w*c*(pow(gam,2)*pow(kvnorm,2)*CHH*SK-pow((1.0-gam),2)*SHH*CK));
-	double gG1313 = std::real(CHH*CK);
-	double igG1314 = std::real((1.0-gam)*SHH*CK+gam*pow(kvnorm,2)*CHH*SK);
-	double gG1324 = std::real((-1.0)*pow(kvnorm,2)*SHH*SK);
-	double igG1412 = std::real(dens*w*c*(-1.0*gam*(gam-1.0)*(1.0-2.0*gam)*CHH*CK-pow(gam,3)*hvnorm_h*pow(kvnorm,2)*SH*SK)+dens*w*c*((pow((1.0-gam),3)-pow(gam,3)*pow(hvnorm,2)*pow(kvnorm,2))*SHH*SK));
-	double igG1413 = std::real((gam-1.0)*CHH*SK-gam*hvnorm_h*SH*CK-gam*pow(hvnorm,2)*SHH*CK);
-	double gG1414 = std::real(2.0*gam*(1.0-gam)*CHH*CK+(pow((1.0-gam),2)+pow(gam,2)*pow(hvnorm,2)*pow(kvnorm,2))*SHH*SK+pow(gam,2)*hvnorm_h*pow(kvnorm,2)*SH*SK);
-	double gG2412 = std::real(dens*w*c*(pow((1.0-gam),2)*CHH*SK-pow(gam,2)*hvnorm_h*SH*CK-pow(gam,2)*pow(hvnorm,2)*SHH*CK));
-	double gG2413 = std::real((-1.0)*(hvnorm_h*SH+pow(hvnorm,2)*SHH)*SK);
-	double gG3412 = std::real((-1.0)*pow((dens*c*w),2)*(-2.0*pow(gam,2)*pow((1-gam),2)*CHH*CK)-pow((dens*c*w),2)*((pow((1-gam),4)+pow(gam,4)*pow(hvnorm,2)*pow(kvnorm,2))*SHH*SK+pow(gam,4)*hvnorm_h*pow(kvnorm,2)*SH*SK));
+	const double gG1212 = std::real((2.0*pow(gam,2)-2.0*gam+1.0)*CHH*CK-pow(gam,2)*hvnorm_h*pow(kvnorm,2)*SH*SK-(pow((1.0-gam),2)+pow(gam,2)*pow(hvnorm,2)*pow(kvnorm,2))*SHH*SK);
+	const double gG1213 = std::real((1.0/(dens*w*c))*(CHH*SK-hvnorm_h*SH*CK-pow(hvnorm,2)*SHH*CK));
+	const double igG1214 = std::real((1.0/(dens*w*c))*((2.0*gam-1.0)*CHH*CK+(1.0-gam-gam*pow(hvnorm,2)*pow(kvnorm,2))*SHH*SK-gam*hvnorm_h*pow(kvnorm,2)*SH*SK));
+	const double gG1224 = std::real((1.0/(dens*w*c))*(pow(kvnorm,2)*CHH*SK-SHH*CK));
+	const double gG1234 = std::real(((-1.0)/pow((w*dens*c),2))*(-2.0*CHH*CK+(1.0+pow(kvnorm,2)*pow(hvnorm,2))*SHH*SK+hvnorm_h*pow(kvnorm,2)*SH*SK));
+	const double gG1312 = std::real(dens*w*c*(pow(gam,2)*pow(kvnorm,2)*CHH*SK-pow((1.0-gam),2)*SHH*CK));
+	const double gG1313 = std::real(CHH*CK);
+	const double igG1314 = std::real((1.0-gam)*SHH*CK+gam*pow(kvnorm,2)*CHH*SK);
+	const double gG1324 = std::real((-1.0)*pow(kvnorm,2)*SHH*SK);
+	const double igG1412 = std::real(dens*w*c*(-1.0*gam*(gam-1.0)*(1.0-2.0*gam)*CHH*CK-pow(gam,3)*hvnorm_h*pow(kvnorm,2)*SH*SK)+dens*w*c*((pow((1.0-gam),3)-pow(gam,3)*pow(hvnorm,2)*pow(kvnorm,2))*SHH*SK));
+	const double igG1413 = std::real((gam-1.0)*CHH*SK-gam*hvnorm_h*SH*CK-gam*pow(hvnorm,2)*SHH*CK);
+	const double gG1414 = std::real(2.0*gam*(1.0-gam)*CHH*CK+(pow((1.0-gam),2)+pow(gam,2)*pow(hvnorm,2)*pow(kvnorm,2))*SHH*SK+pow(gam,2)*hvnorm_h*pow(kvnorm,2)*SH*SK);
+	const double gG2412 = std::real(dens*w*c*(pow((1.0-gam),2)*CHH*SK-pow(gam,2)*hvnorm_h*SH*CK-pow(gam,2)*pow(hvnorm,2)*SHH*CK));
+	const double gG2413 = std::real((-1.0)*(hvnorm_h*SH+pow(hvnorm,2)*SHH)*SK);
+	const double gG3412 = std::real((-1.0)*pow((dens*c*w),2)*(-2.0*pow(gam,2)*pow((1-gam),2)*CHH*CK)-pow((dens*c*w),2)*((pow((1-gam),4)+pow(gam,4)*pow(hvnorm,2)*pow(kvnorm,2))*SHH*SK+pow(gam,4)*hvnorm_h*pow(kvnorm,2)*SH*SK));
 	
 	return std::make_tuple(gG1212,gG1213,igG1214,gG1224,gG1234,gG1312,gG1313,igG1314,gG1324,igG1412,igG1413,gG1414,gG2412,gG2413,gG3412);
 }
 
-std::tuple<double,double,double,double,double,double,double,double,double,double,double,double,double,double,double> compute_G_rho(double c, double dn, double w, double vp, double vs, double dens){
-	auto G = compute_G(c,dn,w,vp,vs,dens);
-	double G1213 = std::get<1>(G);
-	double iG1214 = std::get<2>(G);
-	double G1224 = std::get<3>(G);
-	double G1234 = std::get<4>(G);
-	double G1312 = std::get<5>(G);
-	double iG1412 = std::get<9>(G);
-	double G2412 = std::get<12>(G);
-	double G3412 = std::get<14>(G);
+std::tuple<double,double,double,double,double,double,double,double,double,double,double,double,double,double,double> compute_G_rho(const double &c, const double &dn, const double &w, const double &vp, const double &vs, const double &dens){
+	const auto G = compute_G(c,dn,w,vp,vs,dens);
+	const double G1213 = std::get<1>(G);
+	const double iG1214 = std::get<2>(G);
+	const double G1224 = std::get<3>(G);
+	const double G1234 = std::get<4>(G);
+	const double G1312 = std::get<5>(G);
+	const double iG1412 = std::get<9>(G);
+	const double G2412 = std::get<12>(G);
+	const double G3412 = std::get<14>(G);
 	
-	double gG1212 = 0.0;
-	double gG1213 = std::real((-1.0)*G1213/dens);
-	double igG1214 = std::real((-1.0)*iG1214/dens);
-	double gG1224 = std::real((-1.0)*G1224/dens);
-	double gG1234 = std::real((-2.0)*G1234/dens);
-	double gG1312 = std::real(G1312/dens);
-	double gG1313 = 0.0;
-	double igG1314 = 0.0;
-	double gG1324 = 0.0;
-	double igG1412 = std::real(iG1412/dens);
-	double igG1413 = 0.0;
-	double gG1414 = 0.0;
-	double gG2412 = std::real(G2412/dens);
-	double gG2413 = 0.0;
-	double gG3412 = std::real(2.0*G3412/dens);
+	const double gG1212 = 0.0;
+	const double gG1213 = std::real((-1.0)*G1213/dens);
+	const double igG1214 = std::real((-1.0)*iG1214/dens);
+	const double gG1224 = std::real((-1.0)*G1224/dens);
+	const double gG1234 = std::real((-2.0)*G1234/dens);
+	const double gG1312 = std::real(G1312/dens);
+	const double gG1313 = 0.0;
+	const double igG1314 = 0.0;
+	const double gG1324 = 0.0;
+	const double igG1412 = std::real(iG1412/dens);
+	const double igG1413 = 0.0;
+	const double gG1414 = 0.0;
+	const double gG2412 = std::real(G2412/dens);
+	const double gG2413 = 0.0;
+	const double gG3412 = std::real(2.0*G3412/dens);
 	return std::make_tuple(gG1212,gG1213,igG1214,gG1224,gG1234,gG1312,gG1313,igG1314,gG1324,igG1412,igG1413,gG1414,gG2412,gG2413,gG3412);
 }
-std::tuple<double,double,double,double,double> compute_R(double w, double c, double vp, double vs, double dn, double dens, std::tuple<double,double,double,double,double> T, int param){
+
+std::tuple<double,double,double,double,double> compute_R(const double &w, const double &c, const double &vp, const double &vs, const double &dn, const double &dens, const std::tuple<double,double,double,double,double> &T, const int &param){
 	// Recursive layer stacking from bottom to top layer (an i denotes an imaginary subdeterminant e.g. iR1214)
-	double T1212 = std::get<0>(T);
-	double T1213 = std::get<1>(T);
-	double iT1214 = std::get<2>(T);
-	double T1224 = std::get<3>(T);
-	double T1234 = std::get<4>(T);
+	const double T1212 = std::get<0>(T);
+	const double T1213 = std::get<1>(T);
+	const double iT1214 = std::get<2>(T);
+	const double T1224 = std::get<3>(T);
+	const double T1234 = std::get<4>(T);
 	
 	std::tuple<double,double,double,double,double,double,double,double,double,double,double,double,double,double,double> G;
 	if(param==0){
@@ -382,21 +386,21 @@ std::tuple<double,double,double,double,double> compute_R(double w, double c, dou
 		G = compute_G_rho(c,dn,w,vp,vs,dens);
 	}
 	
-	double G1212 = std::get<0>(G);
-	double G1213 = std::get<1>(G);
-	double iG1214 = std::get<2>(G);
-	double G1224 = std::get<3>(G);
-	double G1234 = std::get<4>(G);
-	double G1312 = std::get<5>(G);
-	double G1313 = std::get<6>(G);
-	double iG1314 = std::get<7>(G);
-	double G1324 = std::get<8>(G);
-	double iG1412 = std::get<9>(G);
-	double iG1413 = std::get<10>(G);
-	double G1414 = std::get<11>(G);
-	double G2412 = std::get<12>(G);
-	double G2413 = std::get<13>(G);
-	double G3412 = std::get<14>(G);
+	const double G1212 = std::get<0>(G);
+	const double G1213 = std::get<1>(G);
+	const double iG1214 = std::get<2>(G);
+	const double G1224 = std::get<3>(G);
+	const double G1234 = std::get<4>(G);
+	const double G1312 = std::get<5>(G);
+	const double G1313 = std::get<6>(G);
+	const double iG1314 = std::get<7>(G);
+	const double G1324 = std::get<8>(G);
+	const double iG1412 = std::get<9>(G);
+	const double iG1413 = std::get<10>(G);
+	const double G1414 = std::get<11>(G);
+	const double G2412 = std::get<12>(G);
+	const double G2413 = std::get<13>(G);
+	const double G3412 = std::get<14>(G);
 	
 	double R1212 = T1212*G1212 + T1213*G1312 - 2.0*iT1214*iG1412 + T1224*G2412 + T1234*G3412;
 	double R1213 = T1212*G1213 + T1213*G1313 - 2.0*iT1214*iG1413 + T1224*G2413 + T1234*G2412;
@@ -441,7 +445,7 @@ std::tuple<double,double,double,double,double> compute_R(double w, double c, dou
 	return std::make_tuple(R1212,R1213,iR1214,R1224,R1234);
 }
 
-double compute_R1212(double w, double c, std::vector<double> vp, std::vector<double> vs, double mu, std::vector<double> depth, std::vector<double> dens, int nlay, int param, int gradlay){
+double compute_R1212(const double &w, const double &c, const std::vector<double> &vp, const std::vector<double> &vs, const double &mu, const std::vector<double> &depth, const std::vector<double> &dens, const int &nlay, const int &param, const int &gradlay){
 	// Recursive layer stacking from bottom to top to get R1212
 	std::tuple<double,double,double,double,double> R;
 	for(int n=nlay-1;n>=0;n--){
@@ -472,30 +476,29 @@ double compute_R1212(double w, double c, std::vector<double> vp, std::vector<dou
 class R1212_root{
 	// Root finding functor for R1212. Keeps all other varibles constants and only changes c (phase velocity) to finds roots. Uses the TOMS algorithm from the boost libraries
 	public:
-		R1212_root(double w_, std::vector<double> vp_, std::vector<double> vs_, double mu_, std::vector<double> depth_, std::vector<double> dens_, int nlay_):w(w_),vp(vp_),vs(vs_),mu(mu_),depth(depth_),dens(dens_),nlay(nlay_) {};
+		R1212_root(const double &w_, const std::vector<double> &vp_, const std::vector<double> &vs_, const double &mu_, const std::vector<double> &depth_, const std::vector<double> &dens_, const int &nlay_):w(w_),vp(vp_),vs(vs_),mu(mu_),depth(depth_),dens(dens_),nlay(nlay_) {};
 		double operator()(const double c){
 			return compute_R1212(w, c, vp, vs, mu, depth, dens, nlay, 0, -999);
 		}
 	private:
-		double w;
-		std::vector<double> vp;
-		std::vector<double> vs;
-		double mu;
-		std::vector<double> depth;
-		std::vector<double> dens;
-		int nlay;
+		const double w;
+		const std::vector<double> vp;
+		const std::vector<double> vs;
+		const double mu;
+		const std::vector<double> depth;
+		const std::vector<double> dens;
+		const int nlay;
 };
 
 struct TerminationCondition{
 	// checks whether root bracketing has sufficiently converged
-	bool operator() (double min, double max){
+	bool operator() (const double &min, const double &max){
     return abs(min - max) < tolerance;
 	}
 };
 
-std::vector<vector<double>> get_gc_segments(double east0, double north0, double east1, double north1, double lon_centr) {
+std::vector<vector<double>> get_gc_segments(const double &east0, const double &north0, const double &east1, const double &north1, const double &lon_centr) {
 	// Approximates great circle path with loxodrome segments.
-	double false_east = 500000.0; // false eating for utm coordinates
 	
 	// Set up of projections
 	TransverseMercatorExact proj(Constants::WGS84_a(), Constants::WGS84_f(), Constants::UTM_k0());
@@ -536,7 +539,7 @@ std::vector<vector<double>> get_gc_segments(double east0, double north0, double 
 		northing.erase(northing.begin()+1, northing.end());
 		
 		// calculate segment length
-		double segment_length = line.Distance()/(npts+1);
+		const double segment_length = line.Distance()/(npts+1);
 		for(int pt = 1; pt <= npts; pt++) {
 			// calculate point along great circle
 			double lon_tmp, lat_tmp;
@@ -569,17 +572,14 @@ std::vector<vector<double>> get_gc_segments(double east0, double north0, double 
 	}
 	
 	// write eastings/northings to pts vector
-	std::vector<vector<double>> pts;
-	pts.push_back(easting);
-	pts.push_back(northing);
+	std::vector<vector<double>> pts(2);
+	pts[0] = easting;
+	pts[1] = northing;
 	return pts;
 }
 
-std::vector<vector<double>> get_t_segments(double east0, double north0, double east1, double north1, double event_e, double event_n, double lon_centr, std::vector<double> origin, double deast, double dnorth, const std::vector<double> &c, int ncells_east, const std::vector<double> &dsdvs, const std::vector<double> &dsdvp, const std::vector<double> &dsdrho, int nlay){
+std::vector<vector<double>> get_t_segments(double east0, double north0, const double &east1, const double &north1, const double &event_e, const double &event_n, const double &lon_centr, const std::vector<double> &origin, const double &deast, const double &dnorth, const std::vector<double> &c, const int &ncells_east, const std::vector<double> &dsdvs, const std::vector<double> &dsdvp, const std::vector<double> &dsdrho, const int &nlay){
 	// Computes relative phase delay for a station pair and a given earthquake
-	double false_east = 500000.0; // false eating for utm coordinates
-	origin[0] = origin[0] - deast;
-	origin[1] = origin[1] - dnorth;
 	
 	// Set up coordinate transformations
 	Geodesic geod(Constants::WGS84_a(), Constants::WGS84_f());
@@ -590,14 +590,14 @@ std::vector<vector<double>> get_t_segments(double east0, double north0, double e
 	// Path segment is interpreted as line segment (not loxodrome)
 	// because we don't care about its length (only orientation).
 	// Check which model cells are crossed by inter-station path segment.
-	double slope = (north1-north0)/(east1-east0);
-	double intercept = north0-slope*east0;
+	const double slope = (north1-north0)/(east1-east0);
+	const double intercept = north0-slope*east0;
 	double ecell0 = floor((east0-origin[0])/deast);
 	double ncell0 = floor((north0-origin[1])/dnorth);
-	double ecell1 = floor((east1-origin[0])/deast);
-	double ncell1 = floor((north1-origin[1])/dnorth);
-	std::vector<vector<double>> times_grads;
-	std::vector<double> times;
+	const double ecell1 = floor((east1-origin[0])/deast);
+	const double ncell1 = floor((north1-origin[1])/dnorth);
+	std::vector<vector<double>> times_grads(4);
+	std::vector<double> times(1);
 	double time = 0.0;
 	double mid_e, mid_n, mid_lon, mid_lat, s12, az1, az2, se, sn, dist_segment_e, dist_segment_n, dsedvs, dsndvs, dsedvp, dsndvp, dsedrho, dsndrho;
 	std::vector<double> rhograd(dsdrho.size(),0.0), vsgrad(dsdrho.size(),0.0), vpgrad(dsdrho.size(),0.0);
@@ -692,28 +692,36 @@ std::vector<vector<double>> get_t_segments(double east0, double north0, double e
 		}
 	}
 	
-	times.push_back(time);
-	times_grads.push_back(times);
-	times_grads.push_back(vsgrad);
-	times_grads.push_back(vpgrad);
-	times_grads.push_back(rhograd);
+	times[0] = time;
+	times_grads[0] = times;
+	times_grads[1] = vsgrad;
+	times_grads[2] = vpgrad;
+	times_grads[3] = rhograd;
 	return times_grads;
 }
+
+struct weighted_add {
+    const double weight;
+    double operator() (const double &aa, const double &bb) {
+        return aa + bb*weight;
+    }
+    weighted_add(double weight_) : weight(weight_) {}
+};
 
 int main(){
 	
 	// Read phase delay time observations
-	NcFile dtpFile("./dt_tiny.nc", NcFile::read);
+	NcFile dtpFile("./dt_tst_utm.nc", NcFile::read);
 	NcDim nperiodsIn = dtpFile.getDim("NumberOfPeriods");
 	NcDim nstatsIn = dtpFile.getDim("NumberOfStations");
 	NcDim nsrcsIn = dtpFile.getDim("NumberOfRays");
 	NcDim neventsIn = dtpFile.getDim("NumberOfEvents");
 	NcDim nevents_per_srcIn = dtpFile.getDim("EventsPerSRC");
-	int nperiods = nperiodsIn.getSize();
-	int nstats = nstatsIn.getSize();
-	int nsrcs = nsrcsIn.getSize();
-	int nevents = neventsIn.getSize();
-	int nevents_per_src = nevents_per_srcIn.getSize();
+	const int nperiods = nperiodsIn.getSize();
+	const int nstats = nstatsIn.getSize();
+	const int nsrcs = nsrcsIn.getSize();
+	const int nevents = neventsIn.getSize();
+	const int nevents_per_src = nevents_per_srcIn.getSize();
 	
 	std::vector<double> periods(nperiods);
 	std::vector<double> mpn(nstats);
@@ -745,14 +753,12 @@ int main(){
 	eventyIn.getVar(eventy.data());
 	
 	double dtp_dummy;
-	double *dummy_pointer = &dtp_dummy;
 	NcVarAtt dummy = dtpIn.getAtt("_FillValue");
-	dummy.getValues(dummy_pointer);
+	dummy.getValues(&dtp_dummy);
 	
 	double lon_centr;
-	double *lon_centr_pnt = &lon_centr;
 	NcVarAtt lonc = mpnIn.getAtt("Central_meridian");
-	lonc.getValues(lon_centr_pnt);
+	lonc.getValues(&lon_centr);
 
 	// Conversion of periods to angular frequencies
 	std::vector<double> w(nperiods);
@@ -763,17 +769,17 @@ int main(){
 	}
 	
 	// Read density, vs, vp from nc file
-	NcFile densFile("./dens_tiny.nc", NcFile::read);
-	NcFile vpFile("./vp_tiny.nc", NcFile::read);
-	NcFile vsFile("./vs_tiny.nc", NcFile::read);
+	NcFile densFile("./dens_na_neu_utm.nc", NcFile::read);
+	NcFile vpFile("./vp_na_neu_utm.nc", NcFile::read);
+	NcFile vsFile("./vs_na_neu_utm.nc", NcFile::read);
 	
 	// Get dimensions of model
 	NcDim nxIn=densFile.getDim("Northing");
 	NcDim nyIn=densFile.getDim("Easting");
 	NcDim nzIn=densFile.getDim("Depth");
-	int NX = nxIn.getSize();
-	int NY = nyIn.getSize();
-	int NZ = nzIn.getSize();
+	const int NX = nxIn.getSize();
+	const int NY = nyIn.getSize();
+	const int NZ = nzIn.getSize();
 	
 	// Define data variables
 	std::vector<double> depth(NZ);
@@ -797,15 +803,12 @@ int main(){
 	NcVar vpIn=vpFile.getVar("Vp");
 	vpIn.getVar(vp_all.data());
 	
-	// Shift vector of depths so that it starts from 0
-	int nlay = depth.size();	// number of layers
-	for(int n=nlay-1; n>=0; n--)
-		depth[n] = depth[n] - depth[0];
+	const int nlay = depth.size();	// number of layers
 	
-	// get model cell sizes (east and northwards)
-	double model_cell_east = east[1] - east[0];
-	double model_cell_north = north[1] - north[0];
-	std::vector<double> model_origin = {east[0], north[0]};
+	// get model origin, cell sizes
+	const double deast = east[1] - east[0];
+	const double dnorth = north[1] - north[0];
+	const std::vector<double> model_origin = {east[0] - deast, north[0] - dnorth};
 	
 	//vectors to store phase delays and gradients
 	std::vector<double> phase_delays(dtp.size(),0.0);
@@ -818,23 +821,24 @@ int main(){
 	
 	ofstream delayfile;
 	delayfile.open ("delays.out");
-	delayfile << "#Easting_epi [m] \t Northing_epi [m] \t Event_num \t Easting_stat1 [m] \t Northing_stat1 [m] \t Easting_stat2 [m] \t Northing_stat2 [m] \t stat1_num \t stat2_num \t Period [s] \t Phase delay [s]";
+	delayfile << "#Event_num \t stat1_num \t stat2_num \t Period [s] \t Phase delay [s]";
 	
 	for(int freq=0; freq<nperiods; freq++){
+		cout << "Period: " << periods[freq] << " s.";
+		cout << "\n";
 		//Vectors to store gradients, dispersion curves
 		std::vector<double> dsdrho(vs_all.size()), dsdvs(vs_all.size()), dsdvp(vs_all.size()), dispersion(NX*NY);	
 		for (int nstep = 0; nstep<NX; nstep++){
-			cout << "Period: " << periods[freq] << "\t NX: " << nstep << "\n";
 			for (int estep = 0; estep<NY; estep++){
-				std::vector<double> dens;
-				std::vector<double> vs;
-				std::vector<double> vp;	
+				std::vector<double> dens(nlay);
+				std::vector<double> vs(nlay);
+				std::vector<double> vp(nlay);	
 				bool lvz=0;
 				for (int n=0; n<nlay; n++){
 					// sort velocities, densities into 1D models 
-					dens.push_back(dens_all[n+nlay*estep+NY*nlay*nstep]);
-					vp.push_back(vp_all[n+nlay*estep+NY*nlay*nstep]);
-					vs.push_back(vs_all[n+nlay*estep+NY*nlay*nstep]);
+					dens[n] = dens_all[n+nlay*estep+NY*nlay*nstep];
+					vp[n] = vp_all[n+nlay*estep+NY*nlay*nstep];
+					vs[n] = vs_all[n+nlay*estep+NY*nlay*nstep];
 					// check if there's a low velocity zone
 					if (n>0 && vs[n]<vs[n-1]){
 						lvz=1;
@@ -849,16 +853,16 @@ int main(){
 				}
 				else{				
 					// Calculation of velocity limits 
-					std::vector<double> c_lim={0,0};
-					double vsmin = *std::min_element(vs.begin(),vs.end());
-					double vsmax = *std::max_element(vs.begin(),vs.end());
-					double vpmin = *std::min_element(vp.begin(),vp.end());
-					double vpmax = *std::max_element(vp.begin(),vp.end());
+					std::vector<double> c_lim(2, 0.0);
+					const double vsmin = *std::min_element(vs.begin(),vs.end());
+					const double vsmax = *std::max_element(vs.begin(),vs.end());
+					const double vpmin = *std::min_element(vp.begin(),vp.end());
+					const double vpmax = *std::max_element(vp.begin(),vp.end());
 					c_lim[0] = newton_vr(vpmin, vsmin)/1.05;
 					c_lim[1] = newton_vr(vpmax, vsmax)*1.05;
 				
 					// step ratio for root bracketing
-					double stepratio = (vsmin - c_lim[0])/(2.0*vsmin);	
+					const double stepratio = (vsmin - c_lim[0])/(2.0*vsmin);	
 	
 					if(verbose==1){
 						cout << "cmin: " << c_lim[0] << "\t cmax: " << c_lim[1] << "\n";
@@ -867,13 +871,13 @@ int main(){
 					}
 				
 					// Shear modulus bottom layer
-					double mu = pow(vs[nlay-1],2)*dens[nlay-1];
+					const double mu = pow(vs[nlay-1],2)*dens[nlay-1];
 					if (verbose==1)
 						cout << "Schermodul unterste Schicht: " << mu << "\n";
 				
 					// Compute initial R1212 polarization for large period below fundamental mode
 					double R1212 = compute_R1212(w[nperiods-1]/10.0, c_lim[0], vp, vs, mu, depth, dens, nlay, 0, -999);
-					bool pol0 = signbit(R1212);
+					const bool pol0 = signbit(R1212);
 				
 					if(verbose==1)
 						cout << "Polarisation von R1212 für geringe Geschwindigkeit: " << pol0 << "\n";
@@ -920,7 +924,7 @@ int main(){
 							// check sign of R1212 between brackets
 							while (tolerance<(c2-c0)){
 								R1212 = compute_R1212(w[freq], c2, vp, vs, mu, depth, dens, nlay, 0, -999);
-								bool pol2 = signbit(R1212);
+								const bool pol2 = signbit(R1212);
 								// if mode skipping detected increase precision (-> decrease step ratio) and return to bracket search
 								if (pol2==pol1){
 									precision = precision * mode_skip_it;
@@ -973,7 +977,6 @@ int main(){
 				
 		// loop over all rays, computes phase delays
 		for (int src=0; src<nsrcs; src++){
-			cout << "Station Combination: " << src << "\n";
 			std::vector<vector<double>> segments;
 			segments = get_gc_segments(mpe[src_rcvr_cmb[src]], mpn[src_rcvr_cmb[src]], mpe[src_rcvr_cmb[src+nsrcs]], mpn[src_rcvr_cmb[src+nsrcs]], lon_centr);
 			std::vector<double> seg_east = segments[0];
@@ -982,14 +985,16 @@ int main(){
 				if (dtp[freq*nsrcs*nevents_per_src+event*nsrcs+src]==dtp_dummy | event_stat_cmb[event*nsrcs+src]==dtp_dummy){
 					// if there is only a dummy value we can skip this period
 					phase_delays[src+nsrcs*event+freq*nsrcs*nevents_per_src] = dtp_dummy;
-					delayfile << "\n" << dtp_dummy << "\t" << dtp_dummy << "\t" << event_stat_cmb[event*nsrcs+src] << "\t" << mpe[src_rcvr_cmb[src]] << "\t" << mpn[src_rcvr_cmb[src]] << "\t" << mpe[src_rcvr_cmb[src+nsrcs]] << "\t" << mpn[src_rcvr_cmb[src+nsrcs]] << "\t" << src_rcvr_cmb[src] << "\t" << src_rcvr_cmb[src+nsrcs] << "\t" << (2.0*M_PI)/w[freq] << "\t" << dtp_dummy;
+					delayfile << "\n" << event_stat_cmb[event*nsrcs+src] << "\t" << src_rcvr_cmb[src] << "\t" << src_rcvr_cmb[src+nsrcs] << "\t" << (2.0*M_PI)/w[freq] << "\t" << dtp_dummy;
 					continue;
 				}
 				else {
 					std::vector<double> dtdvs_tmp(dsdvs.size(),0.0), dtdvp_tmp(dsdvs.size(),0.0), dtdrho_tmp(dsdvs.size(),0.0);
 					double time_total = 0.0;
 					for(int seg=0; seg<seg_east.size()-1; seg++){ //loop over great circle segments
-						std::vector<vector<double>> time_segment = get_t_segments(seg_east[seg], seg_north[seg], seg_east[seg+1], seg_north[seg+1], eventy[event_stat_cmb[event*nsrcs+src]], eventx[event_stat_cmb[event*nsrcs+src]], lon_centr, model_origin, model_cell_east, model_cell_north, dispersion, NY, dsdvs, dsdvp, dsdrho, nlay);
+						//cout << "Period: " << periods[freq] << " s\t Station combination: " << src << " of " << nsrcs << ",\t Event: " << event << " of " << nevents_per_src << ",\t Segment: " << seg << "\n";
+						std::vector<vector<double>> time_segment(4);
+						time_segment = get_t_segments(seg_east[seg], seg_north[seg], seg_east[seg+1], seg_north[seg+1], eventy[event_stat_cmb[event*nsrcs+src]], eventx[event_stat_cmb[event*nsrcs+src]], lon_centr, model_origin, deast, dnorth, dispersion, NY, dsdvs, dsdvp, dsdrho, nlay);
 						std::vector<double> ts = time_segment[0];					
 						time_total = time_total + ts[0];
 						
@@ -1003,13 +1008,12 @@ int main(){
 						}
 					}//end loop ever path segments
 					phase_delays[src+nsrcs*event+freq*nsrcs*nevents_per_src] = time_total;
-					delayfile << "\n" << eventy[event_stat_cmb[event*nsrcs+src]] << "\t" << eventx[event_stat_cmb[event*nsrcs+src]] << "\t" << event_stat_cmb[event*nsrcs+src] << "\t" << mpe[src_rcvr_cmb[src]] << "\t" << mpn[src_rcvr_cmb[src]] << "\t" << mpe[src_rcvr_cmb[src+nsrcs]] << "\t" << mpn[src_rcvr_cmb[src+nsrcs]] << "\t" << src_rcvr_cmb[src] << "\t" << src_rcvr_cmb[src+nsrcs] << "\t" << (2.0*M_PI)/w[freq] << "\t" << time_total;
+					delayfile << "\n" << event_stat_cmb[event*nsrcs+src] << "\t" << src_rcvr_cmb[src] << "\t" << src_rcvr_cmb[src+nsrcs] << "\t" << (2.0*M_PI)/w[freq] << "\t" << time_total;
 					if(calcgrads==1){
-						for(int ii=0; ii<dtdvs.size(); ii++){
-							dtdvs[ii] = dtdvs[ii] + dtdvs_tmp[ii]*(dtp[freq*nsrcs*nevents_per_src+event*nsrcs+src]-time_total);
-							dtdvp[ii] = dtdvp[ii] + dtdvp_tmp[ii]*(dtp[freq*nsrcs*nevents_per_src+event*nsrcs+src]-time_total);
-							dtdrho[ii] = dtdrho[ii] + dtdrho_tmp[ii]*(dtp[freq*nsrcs*nevents_per_src+event*nsrcs+src]-time_total);
-						}
+						const double residual = dtp[freq*nsrcs*nevents_per_src+event*nsrcs+src]-time_total;
+						std::transform(dtdvs.begin(), dtdvs.end(), dtdvs_tmp.begin(), dtdvs.begin(), weighted_add(residual));
+						std::transform(dtdvp.begin(), dtdvp.end(), dtdvp_tmp.begin(), dtdvp.begin(), weighted_add(residual));
+						std::transform(dtdrho.begin(), dtdrho.end(), dtdrho_tmp.begin(), dtdrho.begin(), weighted_add(residual));
 					}
 				}
 			} //end loop over events
