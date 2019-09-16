@@ -831,11 +831,19 @@ class SurfaceWaves{
 		SurfaceWaves(const double &lon_centr_, const double &dtp_dummy_, const std::vector<double> &depth_, const std::vector<double> &northing_, const std::vector<double> &easting_, const std::vector<double> &periods_, const std::vector<double> &mpn_, const std::vector<double> &mpe_, const std::vector<double> &mpz_, const std::vector<double> &src_rcvr_cmb_, const std::vector<double> &dtp_, const std::vector<double> &event_stat_cmb_, const std::vector<double> &eventx_, const std::vector<double> &eventy_):lon_centr(lon_centr_), dtp_dummy(dtp_dummy_), depth(depth_), northing(northing_), easting(easting_), periods(periods_), mpn(mpn_), mpe(mpe_), mpz(mpz_), src_rcvr_cmb(src_rcvr_cmb_), dtp(dtp_), event_stat_cmb(event_stat_cmb_), eventx(eventx_), eventy(eventy_), dens_grad(northing_.size()*easting_.size()*depth_.size()*periods_.size()), vs_grad(northing_.size()*easting_.size()*depth_.size()*periods_.size()), vp_grad(northing_.size()*easting_.size()*depth_.size()*periods_.size()), dtp_mod(dtp_.size()) {};
 		void forward(const std::vector<double> &vs, const std::vector<double> &vp, const std::vector<double> &dens);
 		void gradient();
+		void residual();
 	private:
 		const double lon_centr, dtp_dummy;
 		const std::vector<double> depth, northing, easting, periods, mpn, mpe, mpz, src_rcvr_cmb, dtp, event_stat_cmb, eventx, eventy;
-		std::vector<double> dens_grad, vs_grad, vp_grad, dtp_mod;
+		std::vector<double> dens_grad, vs_grad, vp_grad, dtp_mod, residual_dt;
 };
+
+void SurfaceWaves::residual(){
+	residual_dt = std::transform(dtp_mod.begin(), dtp_mod.end(), dtp.begin(), dtp_mod.begin(), std::minus<double>());
+	for(int ndt=0; ndt<dtp.size(); ndt++){
+		residual_dt[ndt] = abs(residual_dt[ndt]);
+	}
+}
 
 void SurfaceWaves::gradient(){}
 
@@ -1052,7 +1060,7 @@ void SurfaceWaves::forward(const std::vector<double> &vs, const std::vector<doub
 					dtp_mod[src+nsrcs*event+freq*nsrcs*nevents_per_src] = time_total;
 					delayfile << "\n" << event_stat_cmb[event*nsrcs+src] << "\t" << src_rcvr_cmb[src] << "\t" << src_rcvr_cmb[src+nsrcs] << "\t" << (2.0*M_PI)/w[freq] << "\t" << time_total;
 					if(calcgrads==1){
-						const double residual = dtp[freq*nsrcs*nevents_per_src+event*nsrcs+src]-time_total;
+						const double residual = abs(dtp[freq*nsrcs*nevents_per_src+event*nsrcs+src]-time_total);
 						const int model_length = NX*NY*NZ;
 						const int element0 = freq*model_length;
 						const int element1 = ((freq+1)*model_length)-1;
