@@ -828,7 +828,7 @@ std::vector<double> T2w(const std::vector<double> &periods){
 
 class SurfaceWaves{
 	public:
-		SurfaceWaves(const double &lon_centr_, const double &dtp_dummy_, const std::vector<double> &depth_, const std::vector<double> &northing_, const std::vector<double> &easting_, const std::vector<double> &periods_, const std::vector<double> &mpn_, const std::vector<double> &mpe_, const std::vector<double> &mpz_, const std::vector<double> &src_rcvr_cmb_, const std::vector<double> &dtp_, const std::vector<double> &event_stat_cmb_, const std::vector<double> &eventx_, const std::vector<double> &eventy_):lon_centr(lon_centr_), dtp_dummy(dtp_dummy_), depth(depth_), northing(northing_), easting(easting_), periods(periods_), mpn(mpn_), mpe(mpe_), mpz(mpz_), src_rcvr_cmb(src_rcvr_cmb_), dtp(dtp_), event_stat_cmb(event_stat_cmb_), eventx(eventx_), eventy(eventy_), dens_grad(northing_.size()*easting_.size()*depth_.size()*periods_.size()), vs_grad(northing_.size()*easting_.size()*depth_.size()*periods_.size()), vp_grad(northing_.size()*easting_.size()*depth_.size()*periods_.size()), dtp_mod(dtp_.size()) {};
+		SurfaceWaves(const double &lon_centr_, const double &dtp_dummy_, const std::vector<double> &depth_, const std::vector<double> &northing_, const std::vector<double> &easting_, const std::vector<double> &periods_, const std::vector<double> &mpn_, const std::vector<double> &mpe_, const std::vector<double> &mpz_, const std::vector<double> &src_rcvr_cmb_, const std::vector<double> &dtp_, const std::vector<double> &event_stat_cmb_, const std::vector<double> &eventx_, const std::vector<double> &eventy_);
 		void forward(const std::vector<double> &vs, const std::vector<double> &vp, const std::vector<double> &dens);
 		void gradient();
 		void residual();
@@ -838,8 +838,38 @@ class SurfaceWaves{
 		std::vector<double> dens_grad, vs_grad, vp_grad, dtp_mod, residual_dt;
 };
 
+SurfaceWaves::SurfaceWaves(const double &lon_centr_, const double &dtp_dummy_, const std::vector<double> &depth_, const std::vector<double> &northing_, const std::vector<double> &easting_, const std::vector<double> &periods_, const std::vector<double> &mpn_, const std::vector<double> &mpe_, const std::vector<double> &mpz_, const std::vector<double> &src_rcvr_cmb_, const std::vector<double> &dtp_, const std::vector<double> &event_stat_cmb_, const std::vector<double> &eventx_, const std::vector<double> &eventy_)
+			:lon_centr(lon_centr_), dtp_dummy(dtp_dummy_), depth(depth_), northing(northing_), easting(easting_), periods(periods_), mpn(mpn_), mpe(mpe_), mpz(mpz_), src_rcvr_cmb(src_rcvr_cmb_), dtp(dtp_), event_stat_cmb(event_stat_cmb_), eventx(eventx_), eventy(eventy_), dens_grad(northing_.size()*easting_.size()*depth_.size()*periods_.size()), vs_grad(northing_.size()*easting_.size()*depth_.size()*periods_.size()), vp_grad(northing_.size()*easting_.size()*depth_.size()*periods_.size()), dtp_mod(dtp_.size()) {
+	if(lon_centr > 360 || lon_centr < -180){
+		throw "central longitude of UTM projection out of range";
+	}
+	double dist1, dist0 = northing[1] - northing[0];
+	for(int ix=2; ix<northing.size(); ix++){
+		dist1 = northing[ix] - northing[ix-1];
+		if (abs(dist1-dist0)>1e-2){
+			throw "irregular model cell size";
+		}
+	}
+	dist0 = easting[1] - easting[0];
+	for(int iy=2; iy<easting.size(); iy++){
+		dist1 = easting[iy] - easting[iy-1];
+		if (abs(dist1-dist0)>1e-2){
+			throw "irregular model cell size";
+		}
+	}
+	if(mpe.size()!=mpn.size() || mpe.size()!=mpz.size() || mpn.size()!=mpz.size()){
+		throw "inconsistent station coordinates";
+	}
+	if(eventx.size()!=eventy.size()){
+		throw "inconsistent event coordinates";
+	}
+	if(event_stat_cmb.size()*periods.size()!=dtp.size()){
+		throw "inconsistent size of observation vector";
+	}	
+}
+
 void SurfaceWaves::residual(){
-	residual_dt = std::transform(dtp_mod.begin(), dtp_mod.end(), dtp.begin(), dtp_mod.begin(), std::minus<double>());
+	std::transform(dtp_mod.begin(), dtp_mod.end(), dtp.begin(), residual_dt.begin(), std::minus<double>());
 	for(int ndt=0; ndt<dtp.size(); ndt++){
 		residual_dt[ndt] = abs(residual_dt[ndt]);
 	}
@@ -1122,8 +1152,13 @@ int main(){
 	std::vector<double> vs_all = model[5];
 	std::vector<std::vector<double>>().swap(model);
 	
-	SurfaceWaves SW(lon_centr, dtp_dummy, depth, north, east, periods, mpn, mpe, mpz, src_rcvr_cmb, dtp, event_stat_cmb, eventx, eventy);
-	SW.forward(vs_all, vp_all, dens_all);
+	try{
+		SurfaceWaves SW(lon_centr, dtp_dummy, depth, north, east, periods, mpn, mpe, mpz, src_rcvr_cmb, dtp, event_stat_cmb, eventx, eventy);
+		SW.forward(vs_all, vp_all, dens_all);
+	}
+	catch (const char* msg){
+		cerr << msg << "\n";
+	}
 
 	return 0;
 }
