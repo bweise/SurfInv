@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <functional>
 #include <fstream>
+#include <stdlib.h>
 #include <netcdf>
 #include <boost/math/tools/roots.hpp>
 #include <GeographicLib/TransverseMercatorExact.hpp>
@@ -30,17 +31,6 @@ using namespace GeographicLib;
 
 typedef complex<double> dcomp;
 const std::complex<double> i(0, 1.0);
-
-string datafile = "dt_tiny.nc";
-string dens_file = "dens_tiny.nc";
-string vs_file = "vs_tiny.nc";
-string vp_file = "vp_tiny.nc";
-const double false_east = 500000.0; // false eating for utm coordinates
-const bool calcgrads = 1; // set to 1 to calculate gradients.
-const bool verbose = 0; // set to 1 for more output
-const double tolerance = 0.01; // Tolerance for phase velocity [m/s]
-const double length_tolerance = 1.0; // Tolerance for grat circle vs loxodrome length [m]
-const double mode_skip_it = 2.0;	// Number of additional iterations to check for mode skipping & factor to increase precision
 
 std::vector<std::vector<double>> read_data(const string &datafile, double &dtp_dummy, double &lon_centr){
 	
@@ -157,7 +147,7 @@ std::vector<std::vector<double>> read_model(const string &dens_file, const strin
 }
 
 // computation of Rayleigh velocity of homogenous half space using Newton Raphson method
-double newton_vr(const double &vp, const double &vs){
+double newton_vr(const double &vp, const double &vs, const double &tolerance){
 	// variables to store rayleigh velocity
 	double vrlast = vs*0.99;
 	double vr;
@@ -170,8 +160,6 @@ double newton_vr(const double &vp, const double &vs){
 		diff = sqrt(pow(vr-vrlast,2));
 		vrlast = vr;
 	}
-	if (verbose == 1)
-		cout << "vr: " << vr << "\t final diff: " << diff << "\n\n";
 	return vr;
 }
 
@@ -599,12 +587,14 @@ class R1212_root{
 
 struct TerminationCondition{
 	// checks whether root bracketing has sufficiently converged
+	TerminationCondition(const double &tolerance_):tolerance(tolerance_){};
+	const double tolerance;
 	bool operator() (const double &min, const double &max){
-    return abs(min - max) < tolerance;
+		return abs(min - max) < tolerance;
 	}
 };
 
-std::vector<vector<double>> get_gc_segments(const double &east0, const double &north0, const double &east1, const double &north1, const double &lon_centr) {
+std::vector<vector<double>> get_gc_segments(const double &east0, const double &north0, const double &east1, const double &north1, const double &lon_centr, const double &false_east, const double &length_tolerance) {
 	// Approximates great circle path with loxodrome segments.
 	
 	// Set up of projections
@@ -685,7 +675,7 @@ std::vector<vector<double>> get_gc_segments(const double &east0, const double &n
 	return pts;
 }
 
-std::vector<vector<double>> get_t_segments(double east0, double north0, const double &east1, const double &north1, const double &event_e, const double &event_n, const double &lon_centr, const std::vector<double> &origin, const double &deast, const double &dnorth, const std::vector<double> &c, const int &ncells_east, const std::vector<double> &dsdvs, const std::vector<double> &dsdvp, const std::vector<double> &dsdrho, const int &nlay){
+std::vector<vector<double>> get_t_segments(double east0, double north0, const double &east1, const double &north1, const double &event_e, const double &event_n, const double &lon_centr, const std::vector<double> &origin, const double &deast, const double &dnorth, const std::vector<double> &c, const int &ncells_east, const std::vector<double> &dsdvs, const std::vector<double> &dsdvp, const std::vector<double> &dsdrho, const int &nlay, const double false_east){
 	// Computes relative phase delay for a station pair and a given earthquake
 	
 	// Set up coordinate transformations
@@ -761,18 +751,16 @@ std::vector<vector<double>> get_t_segments(double east0, double north0, const do
 		sn = sin((90.0-az2)*M_PI/180.0)*(1.0/c[ncell0 * ncells_east + ecell0]);
 		time = time + (se * dist_segment_e + sn * dist_segment_n)*(-1.0);
 		
-		if(calcgrads==1){
-			for(int n=0;n<nlay;n++){
-				dsedvs = cos((90.0-az2)*M_PI/180.0)*dsdvs[ncell0 * ncells_east * nlay + ecell0 * nlay + n];
-				dsedvp = cos((90.0-az2)*M_PI/180.0)*dsdvp[ncell0 * ncells_east * nlay + ecell0 * nlay + n];
-				dsedrho = cos((90.0-az2)*M_PI/180.0)*dsdrho[ncell0 * ncells_east * nlay + ecell0 * nlay + n];
-				dsndvs = sin((90.0-az2)*M_PI/180.0)*dsdvs[ncell0 * ncells_east * nlay + ecell0 * nlay + n];
-				dsndvp = sin((90.0-az2)*M_PI/180.0)*dsdvp[ncell0 * ncells_east * nlay + ecell0 * nlay + n];
-				dsndrho = sin((90.0-az2)*M_PI/180.0)*dsdrho[ncell0 * ncells_east * nlay + ecell0 * nlay + n];
-				vsgrad[ncell0 * ncells_east * nlay + ecell0 * nlay + n] = vsgrad[ncell0 * ncells_east * nlay + ecell0 * nlay + n] + (dsedvs * dist_segment_e + dsndvs * dist_segment_n)*(-1.0);
-				vpgrad[ncell0 * ncells_east * nlay + ecell0 * nlay + n] = vpgrad[ncell0 * ncells_east * nlay + ecell0 * nlay + n] + (dsedvp * dist_segment_e + dsndvp * dist_segment_n)*(-1.0);
-				rhograd[ncell0 * ncells_east * nlay + ecell0 * nlay + n] = rhograd[ncell0 * ncells_east * nlay + ecell0 * nlay + n] + (dsedrho * dist_segment_e + dsndrho * dist_segment_n)*(-1.0);
-			}
+		for(int n=0;n<nlay;n++){
+			dsedvs = cos((90.0-az2)*M_PI/180.0)*dsdvs[ncell0 * ncells_east * nlay + ecell0 * nlay + n];
+			dsedvp = cos((90.0-az2)*M_PI/180.0)*dsdvp[ncell0 * ncells_east * nlay + ecell0 * nlay + n];
+			dsedrho = cos((90.0-az2)*M_PI/180.0)*dsdrho[ncell0 * ncells_east * nlay + ecell0 * nlay + n];
+			dsndvs = sin((90.0-az2)*M_PI/180.0)*dsdvs[ncell0 * ncells_east * nlay + ecell0 * nlay + n];
+			dsndvp = sin((90.0-az2)*M_PI/180.0)*dsdvp[ncell0 * ncells_east * nlay + ecell0 * nlay + n];
+			dsndrho = sin((90.0-az2)*M_PI/180.0)*dsdrho[ncell0 * ncells_east * nlay + ecell0 * nlay + n];
+			vsgrad[ncell0 * ncells_east * nlay + ecell0 * nlay + n] = vsgrad[ncell0 * ncells_east * nlay + ecell0 * nlay + n] + (dsedvs * dist_segment_e + dsndvs * dist_segment_n)*(-1.0);
+			vpgrad[ncell0 * ncells_east * nlay + ecell0 * nlay + n] = vpgrad[ncell0 * ncells_east * nlay + ecell0 * nlay + n] + (dsedvp * dist_segment_e + dsndvp * dist_segment_n)*(-1.0);
+			rhograd[ncell0 * ncells_east * nlay + ecell0 * nlay + n] = rhograd[ncell0 * ncells_east * nlay + ecell0 * nlay + n] + (dsedrho * dist_segment_e + dsndrho * dist_segment_n)*(-1.0);
 		}
 	}
 	dist_segment_e = east1-east0;
@@ -785,18 +773,16 @@ std::vector<vector<double>> get_t_segments(double east0, double north0, const do
 	sn = sin((90-az2)*M_PI/180)*(1/c[ncell1 * ncells_east + ecell1]);
 	time = time + (se * dist_segment_e + sn * dist_segment_n)*(-1.0);
 	
-	if(calcgrads==1){
-		for(int n=0;n<nlay;n++){
-			dsedvs = cos((90.0-az2)*M_PI/180.0)*dsdvs[ncell1 * ncells_east * nlay + ecell1 * nlay + n];
-			dsedvp = cos((90.0-az2)*M_PI/180.0)*dsdvp[ncell1 * ncells_east * nlay + ecell1 * nlay + n];
-			dsedrho = cos((90.0-az2)*M_PI/180.0)*dsdrho[ncell1 * ncells_east * nlay + ecell1 * nlay + n];
-			dsndvs = sin((90.0-az2)*M_PI/180.0)*dsdvs[ncell1 * ncells_east * nlay + ecell1 * nlay + n];
-			dsndvp = sin((90.0-az2)*M_PI/180.0)*dsdvp[ncell1 * ncells_east * nlay + ecell1 * nlay + n];
-			dsndrho = sin((90.0-az2)*M_PI/180.0)*dsdrho[ncell1 * ncells_east * nlay + ecell1 * nlay + n];
-			vsgrad[ncell1 * ncells_east * nlay + ecell1 * nlay + n] = vsgrad[ncell1 * ncells_east * nlay + ecell1 * nlay + n] + (dsedvs * dist_segment_e + dsndvs * dist_segment_n)*(-1.0);
-			vpgrad[ncell1 * ncells_east * nlay + ecell1 * nlay + n] = vpgrad[ncell1 * ncells_east * nlay + ecell1 * nlay + n] + (dsedvp * dist_segment_e + dsndvp * dist_segment_n)*(-1.0);
-			rhograd[ncell1 * ncells_east * nlay + ecell1 * nlay + n] = rhograd[ncell1 * ncells_east * nlay + ecell1 * nlay + n] + (dsedrho * dist_segment_e + dsndrho * dist_segment_n)*(-1.0);
-		}
+	for(int n=0;n<nlay;n++){
+		dsedvs = cos((90.0-az2)*M_PI/180.0)*dsdvs[ncell1 * ncells_east * nlay + ecell1 * nlay + n];
+		dsedvp = cos((90.0-az2)*M_PI/180.0)*dsdvp[ncell1 * ncells_east * nlay + ecell1 * nlay + n];
+		dsedrho = cos((90.0-az2)*M_PI/180.0)*dsdrho[ncell1 * ncells_east * nlay + ecell1 * nlay + n];
+		dsndvs = sin((90.0-az2)*M_PI/180.0)*dsdvs[ncell1 * ncells_east * nlay + ecell1 * nlay + n];
+		dsndvp = sin((90.0-az2)*M_PI/180.0)*dsdvp[ncell1 * ncells_east * nlay + ecell1 * nlay + n];
+		dsndrho = sin((90.0-az2)*M_PI/180.0)*dsdrho[ncell1 * ncells_east * nlay + ecell1 * nlay + n];
+		vsgrad[ncell1 * ncells_east * nlay + ecell1 * nlay + n] = vsgrad[ncell1 * ncells_east * nlay + ecell1 * nlay + n] + (dsedvs * dist_segment_e + dsndvs * dist_segment_n)*(-1.0);
+		vpgrad[ncell1 * ncells_east * nlay + ecell1 * nlay + n] = vpgrad[ncell1 * ncells_east * nlay + ecell1 * nlay + n] + (dsedvp * dist_segment_e + dsndvp * dist_segment_n)*(-1.0);
+		rhograd[ncell1 * ncells_east * nlay + ecell1 * nlay + n] = rhograd[ncell1 * ncells_east * nlay + ecell1 * nlay + n] + (dsedrho * dist_segment_e + dsndrho * dist_segment_n)*(-1.0);
 	}
 	
 	times[0] = time;
@@ -820,26 +806,30 @@ std::vector<double> T2w(const std::vector<double> &periods){
 	std::vector<double> w(periods.size());
 	for(int n=0; n<periods.size(); n++){
 		w[n] = 2.0*M_PI/periods[n];
-		if (verbose==1)
-			cout << "Kreisfreq. " << n << ": " << w[n] << " rad/s\n";
 	}
 	return w;
 }
 
+void error_msg(){
+	cerr << "Required arguments:\n\t --dtpfile \t PHASE_DELAY_FILENAME\n\t --densfile \t DENSITY_MODEL_FILENAME\n\t --vsfile \t VS_MODEL_FILENAME\n\t --vpfile \t VP_MODEL_FILENAME.\n";
+	cerr << "Optional arguments:\n\t --help \t PRINTS THIS MESSAGE\n\t --falseeast \t FALSE EASTING FOR UTM PROJECTION [500000.0 m]\n\t --ctol \t TOLERANCE FOR PHASE VELOCITY BRACKETING [0.01 m/s]\n\t --disttol \t TOLERANCE FOR GREAT CIRCLE VS LOXODROME LENGTH [1.0 m]\n\t --modskipit \t NUMBER OF ADDITIONAL ITERATIONS TO CHECK FOR MODE SKIPPING [2]\n\t --rootiter \t MAX NUMBER OF ITERATIONS FOR ROOT FINDING ALGORITHM [50]\n";
+}
+
 class SurfaceWaves{
 	public:
-		SurfaceWaves(const double &lon_centr_, const double &dtp_dummy_, const std::vector<double> &depth_, const std::vector<double> &northing_, const std::vector<double> &easting_, const std::vector<double> &periods_, const std::vector<double> &mpn_, const std::vector<double> &mpe_, const std::vector<double> &mpz_, const std::vector<double> &src_rcvr_cmb_, const std::vector<double> &dtp_, const std::vector<double> &event_stat_cmb_, const std::vector<double> &eventx_, const std::vector<double> &eventy_);
+		SurfaceWaves(const double &lon_centr_, const double &dtp_dummy_, const std::vector<double> &depth_, const std::vector<double> &northing_, const std::vector<double> &easting_, const std::vector<double> &periods_, const std::vector<double> &mpn_, const std::vector<double> &mpe_, const std::vector<double> &mpz_, const std::vector<double> &src_rcvr_cmb_, const std::vector<double> &dtp_, const std::vector<double> &event_stat_cmb_, const std::vector<double> &eventx_, const std::vector<double> &eventy_, const double &false_east_, const double &tolerance_, const double &length_tolerance_, const double &mode_skip_it_, const boost::uintmax_t toms_max_iter_);
 		void forward(const std::vector<double> &vs, const std::vector<double> &vp, const std::vector<double> &dens);
-		void gradient();
-		void residual();
+		/*void gradient();
+		void residual();*/
 	private:
-		const double lon_centr, dtp_dummy;
+		const double lon_centr, dtp_dummy, false_east, tolerance, length_tolerance, mode_skip_it;
+		const boost::uintmax_t toms_max_iter;
 		const std::vector<double> depth, northing, easting, periods, mpn, mpe, mpz, src_rcvr_cmb, dtp, event_stat_cmb, eventx, eventy;
-		std::vector<double> dens_grad, vs_grad, vp_grad, dtp_mod, residual_dt;
+		std::vector<double> dens_grad, vs_grad, vp_grad, dtp_mod;// residual_dt;
 };
 
-SurfaceWaves::SurfaceWaves(const double &lon_centr_, const double &dtp_dummy_, const std::vector<double> &depth_, const std::vector<double> &northing_, const std::vector<double> &easting_, const std::vector<double> &periods_, const std::vector<double> &mpn_, const std::vector<double> &mpe_, const std::vector<double> &mpz_, const std::vector<double> &src_rcvr_cmb_, const std::vector<double> &dtp_, const std::vector<double> &event_stat_cmb_, const std::vector<double> &eventx_, const std::vector<double> &eventy_)
-			:lon_centr(lon_centr_), dtp_dummy(dtp_dummy_), depth(depth_), northing(northing_), easting(easting_), periods(periods_), mpn(mpn_), mpe(mpe_), mpz(mpz_), src_rcvr_cmb(src_rcvr_cmb_), dtp(dtp_), event_stat_cmb(event_stat_cmb_), eventx(eventx_), eventy(eventy_), dens_grad(northing_.size()*easting_.size()*depth_.size()*periods_.size()), vs_grad(northing_.size()*easting_.size()*depth_.size()*periods_.size()), vp_grad(northing_.size()*easting_.size()*depth_.size()*periods_.size()), dtp_mod(dtp_.size()) {
+SurfaceWaves::SurfaceWaves(const double &lon_centr_, const double &dtp_dummy_, const std::vector<double> &depth_, const std::vector<double> &northing_, const std::vector<double> &easting_, const std::vector<double> &periods_, const std::vector<double> &mpn_, const std::vector<double> &mpe_, const std::vector<double> &mpz_, const std::vector<double> &src_rcvr_cmb_, const std::vector<double> &dtp_, const std::vector<double> &event_stat_cmb_, const std::vector<double> &eventx_, const std::vector<double> &eventy_, const double &false_east_, const double &tolerance_, const double &length_tolerance_, const double &mode_skip_it_, const boost::uintmax_t toms_max_iter_)
+			:lon_centr(lon_centr_), dtp_dummy(dtp_dummy_), depth(depth_), northing(northing_), easting(easting_), periods(periods_), mpn(mpn_), mpe(mpe_), mpz(mpz_), src_rcvr_cmb(src_rcvr_cmb_), dtp(dtp_), event_stat_cmb(event_stat_cmb_), eventx(eventx_), eventy(eventy_), false_east(false_east_), tolerance(tolerance_), length_tolerance(length_tolerance_), mode_skip_it(mode_skip_it_), toms_max_iter(toms_max_iter_), dens_grad(northing_.size()*easting_.size()*depth_.size()*periods_.size()), vs_grad(northing_.size()*easting_.size()*depth_.size()*periods_.size()), vp_grad(northing_.size()*easting_.size()*depth_.size()*periods_.size()), dtp_mod(dtp_.size()) {
 	if(lon_centr > 360 || lon_centr < -180){
 		throw "central longitude of UTM projection out of range";
 	}
@@ -868,14 +858,14 @@ SurfaceWaves::SurfaceWaves(const double &lon_centr_, const double &dtp_dummy_, c
 	}	
 }
 
-void SurfaceWaves::residual(){
+/*void SurfaceWaves::residual(){
 	std::transform(dtp_mod.begin(), dtp_mod.end(), dtp.begin(), residual_dt.begin(), std::minus<double>());
 	for(int ndt=0; ndt<dtp.size(); ndt++){
 		residual_dt[ndt] = abs(residual_dt[ndt]);
 	}
 }
 
-void SurfaceWaves::gradient(){}
+void SurfaceWaves::gradient(){}*/
 
 void SurfaceWaves::forward(const std::vector<double> &vs, const std::vector<double> &vp, const std::vector<double> &dens){
 	const int nperiods = periods.size();
@@ -894,17 +884,13 @@ void SurfaceWaves::forward(const std::vector<double> &vs, const std::vector<doub
 	const std::vector<double> w = T2w(periods);
 	
 	// Open output files, write header lines
-	ofstream resultfile;
+	/*ofstream resultfile;
 	resultfile.open ("vph_map.out");
 	resultfile << "# Easting [m] \t Northing [m] \t Period [s] \t Phase velocity [m/s] \t Difference [m/s] \t No. of iterations";
 	
 	ofstream delayfile;
 	delayfile.open ("delays.out");
-	delayfile << "#Event_num \t stat1_num \t stat2_num \t Period [s] \t Phase delay [s]";
-	
-	ofstream gradfile;
-	gradfile.open ("vs_grad.out");
-	gradfile << "#Period [s] \t Ncell \t Ecell \t Zcell \t vs_grad[s/(m/s)]";
+	delayfile << "#Event_num \t stat1_num \t stat2_num \t Period [s] \t Phase delay [s]";*/
 	
 	for(int freq=0; freq<nperiods; freq++){
 		cout << "Period: " << periods[freq] << " s.";
@@ -931,7 +917,7 @@ void SurfaceWaves::forward(const std::vector<double> &vs, const std::vector<doub
 				if (vs_1D[0]<=0){
 					// This still needs some work. Computation of dispersion curves does not work if top layer has vs=0
 					vph_map[estep + NY*nstep] = 0.0;
-					resultfile << "\n" << easting[estep] << "\t" << northing[nstep] << "\t" << (2.0*M_PI)/w[freq] << "\t" << 0.0 << "\t" << 0.0 << "\t" << 0.0;
+					//resultfile << "\n" << easting[estep] << "\t" << northing[nstep] << "\t" << (2.0*M_PI)/w[freq] << "\t" << 0.0 << "\t" << 0.0 << "\t" << 0.0;
 					continue;
 				}
 				else{				
@@ -940,28 +926,17 @@ void SurfaceWaves::forward(const std::vector<double> &vs, const std::vector<doub
 					const double vsmax = *std::max_element(vs_1D.begin(),vs_1D.end());
 					const double vpmin = *std::min_element(vp_1D.begin(),vp_1D.end());
 					const double vpmax = *std::max_element(vp_1D.begin(),vp_1D.end());
-					const std::vector<double> c_lim{newton_vr(vpmin, vsmin)/1.05, newton_vr(vpmax, vsmax)*1.05};
+					const std::vector<double> c_lim{newton_vr(vpmin, vsmin, tolerance)/1.05, newton_vr(vpmax, vsmax, tolerance)*1.05};
 					
 					// step ratio for root bracketing
 					const double stepratio = (vsmin - c_lim[0])/(2.0*vsmin);	
-	
-					if(verbose==1){
-						cout << "cmin: " << c_lim[0] << "\t cmax: " << c_lim[1] << "\n";
-						cout << "Anzahl Schichten: " << NZ << "\n";
-						cout << "Easting: " << easting[estep] << "\t Northing: " << northing[nstep] << "\n";
-					}
 				
 					// Shear modulus bottom layer
 					const double mu = pow(vs_1D[NZ-1],2)*dens_1D[NZ-1];
-					if (verbose==1)
-						cout << "Schermodul unterste Schicht: " << mu << "\n";
 						
 					// Compute initial R1212 polarization for large period below fundamental mode
 					double R1212 = compute_R1212(w[nperiods-1]/10.0, c_lim[0], vp_1D, vs_1D, mu, depth, dens_1D, NZ, 0, -999);
 					const bool pol0 = signbit(R1212);
-				
-					if(verbose==1)
-						cout << "Polarisation von R1212 für geringe Geschwindigkeit: " << pol0 << "\n";
 				
 					double c_last=c_lim[0];	//initial value for c to start search
 				
@@ -979,11 +954,6 @@ void SurfaceWaves::forward(const std::vector<double> &vs, const std::vector<doub
 						cnt:;
 						c0 = c1;	// set lower bracket to value of last iteration's upper bracket
 						c1 = c0 + c0*(stepratio/precision);	// increase upper bracket by step ratio
-			
-						if (verbose==1){
-							cout << "c0: " << c0 << "\t" << "stepratio: " << stepratio << "\t" << "precision: " << precision << "\n";
-							cout << "Aktuelle Kreisfreq. & Geschwindigkeit: " << w[freq] << "\t" << c1 << "\n";
-						}
 						
 						// Check polarization of R1212 for the upper bracket	
 						R1212 = compute_R1212(w[freq], c1, vp_1D, vs_1D, mu, depth, dens_1D, NZ, 0, -999);
@@ -995,13 +965,6 @@ void SurfaceWaves::forward(const std::vector<double> &vs, const std::vector<doub
 							double delta = (c2-c0)/mode_skip_it;
 							if (delta < (mode_skip_it*tolerance))
 								delta = tolerance;
-							if (verbose==1){
-								cout << "c0: " << c0 << "\n";
-								cout << "c2: " << c2 << "\n";
-								cout << "c1: " << c1 << "\n";
-								cout << "precision: " << precision << "\n";
-								cout << "delta: " << delta << "\n";
-							}
 							// check sign of R1212 between brackets
 							while (tolerance<(c2-c0)){
 								R1212 = compute_R1212(w[freq], c2, vp_1D, vs_1D, mu, depth, dens_1D, NZ, 0, -999);
@@ -1010,28 +973,25 @@ void SurfaceWaves::forward(const std::vector<double> &vs, const std::vector<doub
 								if (pol2==pol1){
 									precision = precision * mode_skip_it;
 									c1 = c0;
-									if (verbose==1){
-										cout << "Error: Mode skipping detected!\n";
-									}
 									goto cnt;
 								}
 								// "Downward" search along c-axis for mode skipping (2 runs per default)
 								c2 = c2-delta;
-								if (verbose==1)
-									cout << "New c2: " << c2 << "\n";
 							}
 						}		
 					}
 					// If a sign change is found, brackets c0 & c2 are passed to an instance of R1212_root (-> Boost TOMS root finding algorithm)
 					std::pair<double, double> brackets; // stores refinded root brackets
-					boost::uintmax_t max_iter=500;	// Maximum number of TOMS iterations (500 is probably way to much...)
+					boost::uintmax_t max_iter=toms_max_iter;	// Maximum number of TOMS iterations
 					R1212_root root(w[freq], vp_1D, vs_1D, mu, depth, dens_1D, NZ);
-					brackets = boost::math::tools::toms748_solve(root, c0, c1, TerminationCondition(), max_iter);
+					TerminationCondition tc(tolerance);
+					brackets = boost::math::tools::toms748_solve(root, c0, c1, tc, max_iter);
+					if (max_iter>=toms_max_iter && tc(brackets.first, brackets.second)!=1){
+						throw "No root found in maximum allowed number of iterations.";
+					}
 					if (lvz == 0 && (brackets.first + brackets.second)/2.0 < c_last) {
 						c1 = c_lim[0];
 						precision = precision * mode_skip_it;
-						if (verbose==1)
-							cout << "Error: non-monotonous shape of dispersion curve!\n";
 						goto cnt;
 					}
 					c_last = (brackets.first + brackets.second)/2.0;
@@ -1039,18 +999,16 @@ void SurfaceWaves::forward(const std::vector<double> &vs, const std::vector<doub
 					vph_map[estep + NY*nstep] = c_last;
 					
 					// Write output to file
-					resultfile << "\n" << easting[estep] << "\t" << northing[nstep] << "\t" << (2.0*M_PI)/w[freq] << "\t" << c_last << "\t" << brackets.second-brackets.first << "\t" << max_iter;
+					//resultfile << "\n" << easting[estep] << "\t" << northing[nstep] << "\t" << (2.0*M_PI)/w[freq] << "\t" << c_last << "\t" << brackets.second-brackets.first << "\t" << max_iter;
 
-					if(calcgrads==1){
-						for(int n=0;n<NZ;n++){
-							//Computation of Gradients
-							double R_tmp = compute_R1212(w[freq], c_last, vp_1D, vs_1D, mu, depth, dens_1D, NZ, 1, n);
-							dsdvs[n+NZ*estep+NY*NZ*nstep] = R_tmp*(-1.0/pow(c_last,2));
-							R_tmp = compute_R1212(w[freq], c_last, vp_1D, vs_1D, mu, depth, dens_1D, NZ, 2, n);
-							dsdvp[n+NZ*estep+NY*NZ*nstep] = R_tmp*(-1.0/pow(c_last,2));
-							R_tmp = compute_R1212(w[freq], c_last, vp_1D, vs_1D, mu, depth, dens_1D, NZ, 3, n);
-							dsdrho[n+NZ*estep+NY*NZ*nstep] = R_tmp*(-1.0/pow(c_last,2));
-						}
+					for(int n=0;n<NZ;n++){
+						//Computation of Gradients
+						double R_tmp = compute_R1212(w[freq], c_last, vp_1D, vs_1D, mu, depth, dens_1D, NZ, 1, n);
+						dsdvs[n+NZ*estep+NY*NZ*nstep] = R_tmp*(-1.0/pow(c_last,2));
+						R_tmp = compute_R1212(w[freq], c_last, vp_1D, vs_1D, mu, depth, dens_1D, NZ, 2, n);
+						dsdvp[n+NZ*estep+NY*NZ*nstep] = R_tmp*(-1.0/pow(c_last,2));
+						R_tmp = compute_R1212(w[freq], c_last, vp_1D, vs_1D, mu, depth, dens_1D, NZ, 3, n);
+						dsdrho[n+NZ*estep+NY*NZ*nstep] = R_tmp*(-1.0/pow(c_last,2));
 					}
 				} 
 			} // end of loop over northing
@@ -1058,7 +1016,7 @@ void SurfaceWaves::forward(const std::vector<double> &vs, const std::vector<doub
 		
 		// loop over all rays, computes phase delays
 		for (int src=0; src<nsrcs; src++){
-			std::vector<vector<double>> segments = get_gc_segments(mpe[src_rcvr_cmb[src]], mpn[src_rcvr_cmb[src]], mpe[src_rcvr_cmb[src+nsrcs]], mpn[src_rcvr_cmb[src+nsrcs]], lon_centr);
+			std::vector<vector<double>> segments = get_gc_segments(mpe[src_rcvr_cmb[src]], mpn[src_rcvr_cmb[src]], mpe[src_rcvr_cmb[src+nsrcs]], mpn[src_rcvr_cmb[src+nsrcs]], lon_centr, false_east, length_tolerance);
 			std::vector<double> seg_east = segments[0];
 			std::vector<double> seg_north = segments[1];
 			std::vector<std::vector<double>>().swap(segments);
@@ -1066,7 +1024,7 @@ void SurfaceWaves::forward(const std::vector<double> &vs, const std::vector<doub
 				if (dtp[freq*nsrcs*nevents_per_src+event*nsrcs+src]==dtp_dummy | event_stat_cmb[event*nsrcs+src]==dtp_dummy){
 					// if there is only a dummy value we can skip this period
 					dtp_mod[src+nsrcs*event+freq*nsrcs*nevents_per_src] = dtp_dummy;
-					delayfile << "\n" << event_stat_cmb[event*nsrcs+src] << "\t" << src_rcvr_cmb[src] << "\t" << src_rcvr_cmb[src+nsrcs] << "\t" << (2.0*M_PI)/w[freq] << "\t" << dtp_dummy;
+					//delayfile << "\n" << event_stat_cmb[event*nsrcs+src] << "\t" << src_rcvr_cmb[src] << "\t" << src_rcvr_cmb[src+nsrcs] << "\t" << (2.0*M_PI)/w[freq] << "\t" << dtp_dummy;
 					continue;
 				}
 				else {
@@ -1074,60 +1032,144 @@ void SurfaceWaves::forward(const std::vector<double> &vs, const std::vector<doub
 					double time_total = 0.0;
 					for(int seg=0; seg<seg_east.size()-1; seg++){ //loop over great circle segments
 						//cout << "Period: " << periods[freq] << " s\t Station combination: " << src << " of " << nsrcs << ",\t Event: " << event << " of " << nevents_per_src << ",\t Segment: " << seg << "\n";
-						std::vector<vector<double>> time_segment = get_t_segments(seg_east[seg], seg_north[seg], seg_east[seg+1], seg_north[seg+1], eventy[event_stat_cmb[event*nsrcs+src]], eventx[event_stat_cmb[event*nsrcs+src]], lon_centr, model_origin, deast, dnorth, vph_map, NY, dsdvs, dsdvp, dsdrho, NZ);
+						std::vector<vector<double>> time_segment = get_t_segments(seg_east[seg], seg_north[seg], seg_east[seg+1], seg_north[seg+1], eventy[event_stat_cmb[event*nsrcs+src]], eventx[event_stat_cmb[event*nsrcs+src]], lon_centr, model_origin, deast, dnorth, vph_map, NY, dsdvs, dsdvp, dsdrho, NZ, false_east);
 						std::vector<double> ts = time_segment[0];					
 						time_total = time_total + ts[0];
 						
-						if(calcgrads==1){
-							std::vector<double> tmp = time_segment[1];
-							std::transform (vs_tmpgrd.begin(), vs_tmpgrd.end(), tmp.begin(), vs_tmpgrd.begin(), std::plus<double>());
-							tmp = time_segment[2];
-							std::transform (vp_tmpgrd.begin(), vp_tmpgrd.end(), tmp.begin(), vp_tmpgrd.begin(), std::plus<double>());
-							tmp = time_segment[3];
-							std::transform (dens_tmpgrd.begin(), dens_tmpgrd.end(), tmp.begin(), dens_tmpgrd.begin(), std::plus<double>());
-						}
+						std::vector<double> tmp = time_segment[1];
+						std::transform (vs_tmpgrd.begin(), vs_tmpgrd.end(), tmp.begin(), vs_tmpgrd.begin(), std::plus<double>());
+						tmp = time_segment[2];
+						std::transform (vp_tmpgrd.begin(), vp_tmpgrd.end(), tmp.begin(), vp_tmpgrd.begin(), std::plus<double>());
+						tmp = time_segment[3];
+						std::transform (dens_tmpgrd.begin(), dens_tmpgrd.end(), tmp.begin(), dens_tmpgrd.begin(), std::plus<double>());
 					}//end loop ever path segments
 					dtp_mod[src+nsrcs*event+freq*nsrcs*nevents_per_src] = time_total;
-					delayfile << "\n" << event_stat_cmb[event*nsrcs+src] << "\t" << src_rcvr_cmb[src] << "\t" << src_rcvr_cmb[src+nsrcs] << "\t" << (2.0*M_PI)/w[freq] << "\t" << time_total;
-					if(calcgrads==1){
-						const double residual = abs(dtp[freq*nsrcs*nevents_per_src+event*nsrcs+src]-time_total);
-						const int model_length = NX*NY*NZ;
-						const int element0 = freq*model_length;
-						const int element1 = ((freq+1)*model_length)-1;
-						std::transform(vs_grad.begin()+element0, vs_grad.begin()+element1, vs_tmpgrd.begin(), vs_grad.begin()+element0, weighted_add(residual));
-						std::transform(vp_grad.begin()+element0, vp_grad.begin()+element1, vp_tmpgrd.begin(), vp_grad.begin()+element0, weighted_add(residual));
-						std::transform(dens_grad.begin()+element0, dens_grad.begin()+element1, dens_tmpgrd.begin(), dens_grad.begin()+element0, weighted_add(residual));
-					}
+					//delayfile << "\n" << event_stat_cmb[event*nsrcs+src] << "\t" << src_rcvr_cmb[src] << "\t" << src_rcvr_cmb[src+nsrcs] << "\t" << (2.0*M_PI)/w[freq] << "\t" << time_total;
+					const double residual = abs(dtp[freq*nsrcs*nevents_per_src+event*nsrcs+src]-time_total);
+					const int model_length = NX*NY*NZ;
+					const int element0 = freq*model_length;
+					const int element1 = ((freq+1)*model_length)-1;
+					std::transform(vs_grad.begin()+element0, vs_grad.begin()+element1, vs_tmpgrd.begin(), vs_grad.begin()+element0, weighted_add(residual));
+					std::transform(vp_grad.begin()+element0, vp_grad.begin()+element1, vp_tmpgrd.begin(), vp_grad.begin()+element0, weighted_add(residual));
+					std::transform(dens_grad.begin()+element0, dens_grad.begin()+element1, dens_tmpgrd.begin(), dens_grad.begin()+element0, weighted_add(residual));
 				}
 			} //end loop over events
 		} // end loop rays
 	}// end loop frequencies
 	
-	resultfile << "\n";
+	/*resultfile << "\n";
 	resultfile.close();
 	
 	delayfile << "\n";
-	delayfile.close();
-	
-	int index = 0;
-	if (calcgrads==1){
-		for(int freq=0; freq<nperiods; freq++){
-			for(int nstep=0; nstep<NX; nstep++){
-				for(int estep=0; estep<NY; estep++){
-					for(int n=0; n<NZ; n++){
-						gradfile << "\n" << periods[freq] << "\t" << nstep << "\t" << estep << "\t" << n << "\t" << vs_grad[index];
-						index++;
-					}
-				}
-			}
-		}		
-	}
-	
-	gradfile << "\n";
-	gradfile.close();
+	delayfile.close();*/
 }
 
-int main(){
+int main(int argc, char** argv){
+	
+	string datafile="dummy", dens_file="dummy", vs_file="dummy", vp_file="dummy";
+	// set some defaults, can be overriden through command line arguments.
+	double false_east = 500000.0; // false eating for utm coordinates
+	double tolerance = 0.01; // Tolerance for phase velocity [m/s]
+	double length_tolerance = 1.0; // Tolerance for grat circle vs loxodrome length [m]
+	double mode_skip_it = 2.0;	// Number of additional iterations to check for mode skipping & factor to increase precision
+	boost::uintmax_t toms_max_iter = 50; // Max number of iterations for root finding algorithm
+	
+	if(argc<9){
+		error_msg();
+		return 1;
+	}
+	for(int opt=1; opt<argc; opt++){
+		string arg=argv[opt];
+		if(arg=="--help"){
+			error_msg();
+			return 0;
+		}
+		if(arg=="--dtpfile"){
+			if(opt+1<argc){
+				datafile = argv[++opt];
+			}
+			else{
+				cerr << "--dtpfile needs an argument.\n";
+				return 1;
+			}
+		}
+		if(arg=="--densfile"){
+			if(opt+1<argc){
+				dens_file = argv[++opt];
+			}
+			else{
+				cerr << "--densfile needs an argument.\n";
+				return 1;
+			}
+		}
+		if(arg=="--vsfile"){
+			if(opt+1<argc){
+				vs_file = argv[++opt];
+			}
+			else{
+				cerr << "--vsfile needs an argument.\n";
+				return 1;
+			}
+		}
+		if(arg=="--vpfile"){
+			if(opt+1<argc){
+				vp_file = argv[++opt];
+			}
+			else{
+				cerr << "--vpfile needs an argument.\n";
+				return 1;
+			}
+		}
+		if(arg=="--falseeast"){
+			if(opt+1<argc){
+				false_east = atof(argv[++opt]);
+			}
+			else{
+				cerr << "--falseeast needs an argument (or it can be omitted).\n";
+				return 1;
+			}
+		}
+		if(arg=="--ctol"){
+			if(opt+1<argc){
+				tolerance = atof(argv[++opt]);
+			}
+			else{
+				cerr << "--ctol needs an argument (or it can be omitted).\n";
+				return 1;
+			}
+		}
+		if(arg=="--disttol"){
+			if(opt+1<argc){
+				length_tolerance = atof(argv[++opt]);
+			}
+			else{
+				cerr << "--disttol needs an argument (or it can be omitted).\n";
+				return 1;
+			}
+		}
+		if(arg=="--modskipit"){
+			if(opt+1<argc){
+				mode_skip_it = atof(argv[++opt]);
+			}
+			else{
+				cerr << "--modskipit needs an argument (or it can be omitted).\n";
+				return 1;
+			}
+		}
+		if(arg=="--rootiter"){
+			if(opt+1<argc){
+				toms_max_iter = atoi(argv[++opt]);
+			}
+			else{
+				cerr << "--rootiter needs an argument (or it can be omitted).\n";
+				return 1;
+			}
+		}
+	}
+	if(datafile=="dummy" || dens_file=="dummy" || vs_file=="dummy" || vp_file=="dummy"){
+		error_msg();
+		return 1;
+	}
 	
 	double lon_centr, dtp_dummy;
 	
@@ -1153,7 +1195,7 @@ int main(){
 	std::vector<std::vector<double>>().swap(model);
 	
 	try{
-		SurfaceWaves SW(lon_centr, dtp_dummy, depth, north, east, periods, mpn, mpe, mpz, src_rcvr_cmb, dtp, event_stat_cmb, eventx, eventy);
+		SurfaceWaves SW(lon_centr, dtp_dummy, depth, north, east, periods, mpn, mpe, mpz, src_rcvr_cmb, dtp, event_stat_cmb, eventx, eventy, false_east, tolerance, length_tolerance, mode_skip_it, toms_max_iter);
 		SW.forward(vs_all, vp_all, dens_all);
 	}
 	catch (const char* msg){
